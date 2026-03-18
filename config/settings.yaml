@@ -1,7 +1,7 @@
 ollama:
   base_url: "http://localhost:11434/v1"
   agent_model: "llama3.1:8b"        # fast, for 24-agent chatter
-  synthesis_model: "qwen2.5:32b"     # heavyweight, for final report
+  synthesis_model: "phi4:14b"     # heavyweight, for final report
   api_key: "ollama"                   # required by openai client, any value
 
 aoms:
@@ -17,7 +17,7 @@ market_data:
   lookback_days: 5
 
 simulation:
-  num_rounds: 5            # rounds of debate per cycle
+  num_rounds: 3            # rounds of debate per cycle
   cycle_interval_sec: 300  # 5 minutes
   conviction_threshold: 70 # min conviction % to include in consensus
 
