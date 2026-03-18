@@ -17,20 +17,17 @@ models:
   fast_local:
     provider: ollama
     model: "llama3.1:8b"
-  claude_sonnet:
-    provider: claude_cli
-    model: "sonnet"
-  claude_opus:
-    provider: claude_cli
-    model: "opus"
+  premium_local:
+    provider: ollama
+    model: "phi4:14b"
 
 tribe_models:
-  technical: fast_local      # 6 agents — Ollama local, fast
-  macro: fast_local          # 6 agents — Ollama local, fast
-  sentiment: fast_local      # 6 agents — Ollama local, fast
-  strategists: claude_sonnet # 6 agents — Claude Sonnet via CLI (Max plan OAuth)
+  technical: fast_local       # 6 agents — Llama 8B, fast
+  macro: fast_local           # 6 agents — Llama 8B, fast
+  sentiment: fast_local       # 6 agents — Llama 8B, fast
+  strategists: premium_local  # 6 agents — Phi-4 14B, deeper reasoning
 
-synthesis_model: claude_sonnet  # trade card synthesis via Claude CLI
+synthesis_model: premium_local  # trade card synthesis via Phi-4 14B
 
 aoms:
   base_url: "http://localhost:9100"
