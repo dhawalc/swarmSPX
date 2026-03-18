@@ -25,6 +25,7 @@ class TraderAgent:
         bias: str,
         ollama_base_url: str = "http://localhost:11434/v1",
         model: str = "llama3.1:8b",
+        tribe: str = "unknown",
     ):
         self.agent_id = agent_id
         self.name = name
@@ -32,6 +33,7 @@ class TraderAgent:
         self.specialty = specialty
         self.bias = bias
         self.model = model
+        self.tribe = tribe
         self.client = AsyncOpenAI(base_url=ollama_base_url, api_key="ollama")
         self.last_vote: Optional[AgentVote] = None
 

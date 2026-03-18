@@ -28,6 +28,7 @@ class AgentForge:
                     bias=agent_def["bias"],
                     ollama_base_url=ollama_url,
                     model=model,
+                    tribe=tribe_name,
                 )
                 agents.append(agent)
         return agents

@@ -6,8 +6,45 @@ from rich.text import Text
 from rich import box
 from datetime import datetime
 from swarmspx.agents.base import AgentVote
+from swarmspx.events import (
+    EventBus, Event, CycleStarted, MarketDataFetched,
+    RoundStarted, AgentVoted, RoundCompleted,
+    ConsensusReached, TradeCardGenerated, CycleCompleted, EngineError,
+)
 
 console = Console()
+
+
+class RichConsoleSubscriber:
+    """Subscribes to EventBus and renders via Rich console (backward compat)."""
+
+    def __init__(self, bus: EventBus):
+        self.bus = bus
+        self.bus.on_event(self._handle_event)
+        self._last_votes: list[AgentVote] = []
+
+    def _handle_event(self, event: Event):
+        if isinstance(event, CycleStarted):
+            console.rule("[bold blue]SwarmSPX -- New Simulation Cycle[/bold blue]")
+        elif isinstance(event, MarketDataFetched):
+            mc = event.market_context
+            console.print(f"SPX: ${mc['spx_price']:.2f}  VIX: {mc['vix_level']:.1f}  Regime: {mc['market_regime']}")
+        elif isinstance(event, RoundStarted):
+            console.print(f"[dim]Round {event.round_num}/{event.total_rounds}...[/dim]")
+        elif isinstance(event, RoundCompleted):
+            vc = event.vote_counts
+            console.print(f"  BULL: {vc.get('BULL',0)}  BEAR: {vc.get('BEAR',0)}  NEUTRAL: {vc.get('NEUTRAL',0)}")
+        elif isinstance(event, ConsensusReached):
+            c = event.consensus
+            color = "green" if c["direction"] == "BULL" else "red" if c["direction"] == "BEAR" else "yellow"
+            console.print(f"[bold {color}]Consensus: {c['direction']} @ {c['confidence']:.0f}% confidence ({c['agreement_pct']:.0f}% agreement)[/bold {color}]")
+        elif isinstance(event, TradeCardGenerated):
+            render_trade_card(event.trade_card, {})
+        elif isinstance(event, CycleCompleted):
+            console.print(f"[dim]Cycle completed in {event.duration_sec:.1f}s[/dim]")
+        elif isinstance(event, EngineError):
+            console.print(f"[bold red]ERROR: {event.message}[/bold red]")
+
 
 def render_trade_card(trade_card: dict, consensus: dict):
     """Render the main trade signal card."""
@@ -15,11 +52,9 @@ def render_trade_card(trade_card: dict, consensus: dict):
     confidence = trade_card.get("confidence", 0)
     action = trade_card.get("action", "WAIT")
 
-    # Color coding
     color = "green" if direction == "BULL" else "red" if direction == "BEAR" else "yellow"
     action_color = "green" if action == "BUY" else "red" if action == "SELL" else "yellow"
 
-    # Build trade card content
     lines = []
     lines.append(f"[bold {color}]Direction: {direction}[/bold {color}]  [bold]Confidence: {confidence:.0f}%[/bold]  Agreement: {trade_card.get('agreement_pct', 0):.0f}%")
     lines.append(f"Regime: {trade_card.get('market_regime', 'unknown')}  |  SPX: ${trade_card.get('spx_price', 0):.2f}  |  VIX: {trade_card.get('vix_level', 0):.1f}")
@@ -45,6 +80,7 @@ def render_trade_card(trade_card: dict, consensus: dict):
     )
     console.print(panel)
 
+
 def render_agent_grid(votes: list[AgentVote]):
     """Render a compact grid of all 24 agent votes."""
     table = Table(title="Agent Votes", box=box.SIMPLE, show_header=True)
@@ -64,8 +100,10 @@ def render_agent_grid(votes: list[AgentVote]):
         )
     console.print(table)
 
+
 def render_simulation_progress(round_num: int, total_rounds: int, votes_so_far: int):
     console.print(f"[dim]Round {round_num}/{total_rounds} -- {votes_so_far} agents voted...[/dim]")
+
 
 def render_error(msg: str):
     console.print(f"[bold red]ERROR: {msg}[/bold red]")

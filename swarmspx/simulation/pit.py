@@ -4,6 +4,7 @@ from typing import Optional
 from swarmspx.agents.base import TraderAgent, AgentVote
 from swarmspx.simulation.consensus import ConsensusExtractor
 from swarmspx.memory import AOMemory
+from swarmspx.events import EventBus, NoOpBus, RoundStarted, AgentVoted, RoundCompleted
 
 BATCH_SIZE = 6  # Run 6 agents in parallel at a time
 
@@ -18,11 +19,13 @@ class TradingPit:
         agents: list[TraderAgent],
         memory: AOMemory,
         num_rounds: int = 5,
+        bus: Optional[EventBus] = None,
     ):
         self.agents = agents
         self.memory = memory
         self.num_rounds = num_rounds
         self.consensus_extractor = ConsensusExtractor()
+        self.bus = bus or NoOpBus()
 
     async def run(self, market_context: dict) -> dict:
         """Run a full simulation cycle and return consensus."""
@@ -30,11 +33,18 @@ class TradingPit:
         current_votes: list[AgentVote] = []
 
         for round_num in range(1, self.num_rounds + 1):
+            await self.bus.emit(RoundStarted(round_num=round_num, total_rounds=self.num_rounds))
             prior_votes = current_votes.copy()
             current_votes = await self._run_round(
                 market_context, round_num, prior_votes
             )
             all_rounds.append(current_votes)
+            vote_counts = dict(Counter(v.direction for v in current_votes))
+            await self.bus.emit(RoundCompleted(
+                round_num=round_num,
+                votes=[{"agent_id": v.agent_id, "direction": v.direction, "conviction": v.conviction, "trade_idea": v.trade_idea, "changed_from": v.changed_from} for v in current_votes],
+                vote_counts=vote_counts,
+            ))
 
         # Final consensus from last round
         prior = all_rounds[-2] if len(all_rounds) >= 2 else None
@@ -62,7 +72,6 @@ class TradingPit:
             batch = self.agents[i:i + BATCH_SIZE]
             tasks = []
             for agent in batch:
-                # Get AOMS memory context relevant to this agent's specialty
                 memory_context = self.memory.recall_for_agent(
                     agent_id=agent.agent_id,
                     specialty=agent.specialty,
@@ -70,8 +79,20 @@ class TradingPit:
                 )
                 tasks.append(agent.think(market_context, round_num, prior_votes, memory_context))
             batch_votes = await asyncio.gather(*tasks, return_exceptions=True)
-            for vote in batch_votes:
+            for j, vote in enumerate(batch_votes):
                 if isinstance(vote, AgentVote):
                     votes.append(vote)
+                    agent = batch[j]
+                    await self.bus.emit(AgentVoted(
+                        agent_id=vote.agent_id,
+                        agent_name=agent.name,
+                        tribe=agent.tribe,
+                        direction=vote.direction,
+                        conviction=vote.conviction,
+                        reasoning=vote.reasoning,
+                        trade_idea=vote.trade_idea,
+                        changed_from=vote.changed_from,
+                        round_num=round_num,
+                    ))
 
         return votes
