@@ -2,16 +2,20 @@
 """Run SwarmSPX on a 5-minute schedule during market hours."""
 import asyncio
 import yaml
+from swarmspx.events import EventBus
 from swarmspx.engine import SwarmSPXEngine
-from swarmspx.ui.dashboard import console
+from swarmspx.ui.dashboard import RichConsoleSubscriber, console
 
 async def main():
     with open("config/settings.yaml") as f:
         settings = yaml.safe_load(f)
     interval = settings["simulation"]["cycle_interval_sec"]
 
+    bus = EventBus()
+    RichConsoleSubscriber(bus)
+
     console.print(f"[bold green]SwarmSPX Scheduler started -- running every {interval//60}min[/bold green]")
-    engine = SwarmSPXEngine()
+    engine = SwarmSPXEngine(bus=bus)
 
     while True:
         try:
