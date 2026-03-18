@@ -45,6 +45,41 @@ const AgentNetwork = (() => {
     NEUTRAL: "#37474f", neutral: "#37474f",
   };
 
+  // ── Agent Metadata for hover cards (Upgrade 2) ─────────
+  const AGENT_META = {
+    vwap_victor: { name: "VWAP Victor", tribe: "Technical", strategy: "Mean reversion to VWAP" },
+    gamma_gary: { name: "Gamma Gary", tribe: "Technical", strategy: "Gamma exposure hedging" },
+    delta_dawn: { name: "Delta Dawn", tribe: "Technical", strategy: "Delta-neutral scalping" },
+    momentum_mike: { name: "Momentum Mike", tribe: "Technical", strategy: "Breakout & trend following" },
+    level_lucy: { name: "Level Lucy", tribe: "Technical", strategy: "Support & resistance" },
+    tick_tina: { name: "Tick Tina", tribe: "Technical", strategy: "Market internals (TICK, TRIN)" },
+    fed_fred: { name: "Fed Fred", tribe: "Macro", strategy: "FOMC & rates policy" },
+    flow_fiona: { name: "Flow Fiona", tribe: "Macro", strategy: "Dark pool & options flow" },
+    vix_vinny: { name: "VIX Vinny", tribe: "Macro", strategy: "Volatility regime timing" },
+    gex_gina: { name: "GEX Gina", tribe: "Macro", strategy: "Gamma exposure levels" },
+    putcall_pete: { name: "Put-Call Pete", tribe: "Macro", strategy: "Put/call ratio sentiment" },
+    breadth_brad: { name: "Breadth Brad", tribe: "Macro", strategy: "Market breadth & internals" },
+    twitter_tom: { name: "Twitter Tom", tribe: "Sentiment", strategy: "Social media sentiment" },
+    contrarian_carl: { name: "Contrarian Carl", tribe: "Sentiment", strategy: "Fade the crowd" },
+    fear_felicia: { name: "Fear Felicia", tribe: "Sentiment", strategy: "Fear & greed mean reversion" },
+    news_nancy: { name: "News Nancy", tribe: "Sentiment", strategy: "Breaking news & event-driven" },
+    retail_ray: { name: "Retail Ray", tribe: "Sentiment", strategy: "Fade retail flow" },
+    whale_wanda: { name: "Whale Wanda", tribe: "Sentiment", strategy: "Large block detection" },
+    calendar_cal: { name: "Calendar Cal", tribe: "Strategists", strategy: "Time decay & expiry dynamics" },
+    spread_sam: { name: "Spread Sam", tribe: "Strategists", strategy: "Defined-risk spreads" },
+    scalp_steve: { name: "Scalp Steve", tribe: "Strategists", strategy: "1-5 minute scalping" },
+    swing_sarah: { name: "Swing Sarah", tribe: "Strategists", strategy: "1-4 hour swings" },
+    risk_rick: { name: "Risk Rick", tribe: "Strategists", strategy: "Position sizing & risk mgmt" },
+    synthesis_syd: { name: "Synthesis Syd", tribe: "Strategists", strategy: "Cross-tribe consensus" },
+  };
+
+  // Short name for under-node label (e.g. "VWAP Victor" -> "VWAP V.")
+  function _shortName(fullName) {
+    const parts = fullName.split(" ");
+    if (parts.length < 2) return fullName;
+    return parts[0].toUpperCase() + " " + parts[1][0] + ".";
+  }
+
   // ── State ───────────────────────────────────────────────
   let canvas, ctx;
   let W, H, dpr;
@@ -56,6 +91,18 @@ const AgentNetwork = (() => {
   let time = 0;
   let lastTime = 0;
 
+  // Consensus climax state (Upgrade 1)
+  let consensusFlash = { active: false, alpha: 0, color: "#ffffff" };
+  let consensusGlow = { active: false, alpha: 0, color: "#ffffff" };
+  let particleSpeedMult = 1;
+
+  // Hover state (Upgrade 2)
+  let hoveredNode = null;
+  let hoverCardEl = null;
+
+  // Cinematic state (Upgrade 3)
+  let isCinematic = false;
+
   // ── Init ────────────────────────────────────────────────
   function init(canvasId) {
     canvas = document.getElementById(canvasId || "agent-canvas");
@@ -66,6 +113,8 @@ const AgentNetwork = (() => {
     _buildNodes();
     _initAmbientParticles();
     _listen();
+    _initHoverCard();
+    _initCinematicMode();
     lastTime = performance.now();
     _loop();
 
@@ -95,7 +144,7 @@ const AgentNetwork = (() => {
           tribeColor: info.color,
           abbr: info.abbr[i],
           x: 0, y: 0, tx: 0, ty: 0,
-          r: 18, tr: 18,
+          r: 24, tr: 24,
           dir: "NEUTRAL",
           prevDir: "NEUTRAL",
           conv: 0,
@@ -213,6 +262,68 @@ const AgentNetwork = (() => {
       // Shockwave from center
       shockwaves.push({ x: W / 2, y: H / 2, radius: 0, maxRadius: Math.max(W, H) * 0.6, alpha: 0.3 });
     });
+
+    // ── UPGRADE 1: Consensus Climax ──────────────────────
+    document.addEventListener("consensus:reached", (e) => {
+      const d = e.detail || {};
+      const dir = (d.direction || "").toUpperCase();
+      const col = dir === "BULL" ? "#00e676" : dir === "BEAR" ? "#ff1744" : "#40c4ff";
+
+      // MASSIVE shockwave that fills the entire canvas
+      shockwaves.push({ x: W / 2, y: H / 2, radius: 0, maxRadius: Math.max(W, H) * 1.5, alpha: 0.6, color: col, lineWidth: 4 });
+      // Second trailing shockwave
+      setTimeout(() => {
+        shockwaves.push({ x: W / 2, y: H / 2, radius: 0, maxRadius: Math.max(W, H) * 1.2, alpha: 0.4, color: "#ffffff", lineWidth: 2 });
+      }, 150);
+
+      // Flash the entire canvas background
+      consensusFlash.active = true;
+      consensusFlash.alpha = 0.35;
+      consensusFlash.color = col;
+
+      // All connections glow white then settle to consensus color
+      consensusGlow.active = true;
+      consensusGlow.alpha = 1.0;
+      consensusGlow.color = col;
+
+      // All nodes pulse outward with consensus color
+      for (const n of nodes) {
+        n.glow = 1.0;
+        n.ring = true;
+        n.ringTime = 0;
+      }
+
+      // Triple particle speed
+      particleSpeedMult = 3.0;
+    });
+
+    // ── UPGRADE 1: Trade card dramatic flash ─────────────
+    document.addEventListener("tradecard:generated", (e) => {
+      const d = e.detail || {};
+      const dir = (d.direction || d.action || "").toUpperCase();
+      const isBull = dir === "BULL" || dir === "BUY";
+      const isBear = dir === "BEAR" || dir === "SELL";
+
+      // Dramatic glow on trade card panel
+      const tcEl = document.getElementById("trade-card");
+      if (tcEl) {
+        tcEl.classList.remove("tc-dramatic-flash-bull", "tc-dramatic-flash-bear", "tc-dramatic-flash");
+        void tcEl.offsetWidth;
+        tcEl.classList.add(isBull ? "tc-dramatic-flash-bull" : isBear ? "tc-dramatic-flash-bear" : "tc-dramatic-flash");
+        setTimeout(() => tcEl.classList.remove("tc-dramatic-flash-bull", "tc-dramatic-flash-bear", "tc-dramatic-flash"), 1300);
+      }
+
+      // Secondary pulse from center-panel area
+      const centerPanel = document.getElementById("panel-center");
+      if (centerPanel) {
+        const rect = centerPanel.getBoundingClientRect();
+        const canvasRect = canvas.getBoundingClientRect();
+        const px = rect.left + rect.width / 2 - canvasRect.left;
+        const py = rect.top + rect.height / 2 - canvasRect.top;
+        // Only emit if within canvas bounds roughly
+        shockwaves.push({ x: W * 0.8, y: H * 0.4, radius: 0, maxRadius: Math.max(W, H) * 0.5, alpha: 0.25, color: isBull ? "#00e676" : isBear ? "#ff1744" : "#40c4ff" });
+      }
+    });
   }
 
   // ── Thought Bubbles ─────────────────────────────────────
@@ -251,8 +362,8 @@ const AgentNetwork = (() => {
       // Smooth conviction
       n.conv += (n.targetConv - n.conv) * 0.08;
 
-      // Target radius: 18-22 based on conviction
-      n.tr = 18 + (n.conv / 100) * 4;
+      // Target radius: 24-30 based on conviction
+      n.tr = 24 + (n.conv / 100) * 6;
       n.r += (n.tr - n.r) * 0.08;
 
       // Glow decay
@@ -270,14 +381,30 @@ const AgentNetwork = (() => {
       }
     }
 
-    // Ambient particles
+    // Ambient particles (speed multiplied during consensus climax)
     for (const p of particles) {
-      p.x += p.vx;
-      p.y += p.vy;
+      p.x += p.vx * particleSpeedMult;
+      p.y += p.vy * particleSpeedMult;
       if (p.x < 0) p.x = W;
       if (p.x > W) p.x = 0;
       if (p.y < 0) p.y = H;
       if (p.y > H) p.y = 0;
+    }
+
+    // Decay particle speed multiplier back to 1
+    if (particleSpeedMult > 1) {
+      particleSpeedMult = 1 + (particleSpeedMult - 1) * Math.pow(0.3, dt);
+      if (particleSpeedMult < 1.05) particleSpeedMult = 1;
+    }
+
+    // Consensus flash decay (Upgrade 1)
+    if (consensusFlash.active) {
+      consensusFlash.alpha *= Math.pow(0.08, dt);
+      if (consensusFlash.alpha < 0.005) consensusFlash.active = false;
+    }
+    if (consensusGlow.active) {
+      consensusGlow.alpha *= Math.pow(0.25, dt);
+      if (consensusGlow.alpha < 0.005) consensusGlow.active = false;
     }
 
     // Data particles along connections
@@ -353,6 +480,14 @@ const AgentNetwork = (() => {
   function _draw() {
     ctx.clearRect(0, 0, W, H);
 
+    // Consensus flash background (Upgrade 1)
+    if (consensusFlash.active && consensusFlash.alpha > 0.005) {
+      ctx.save();
+      ctx.fillStyle = _hex2rgba(consensusFlash.color, consensusFlash.alpha);
+      ctx.fillRect(0, 0, W, H);
+      ctx.restore();
+    }
+
     _drawDotGrid();
     _drawAmbientParticles();
     _drawShockwaves();
@@ -397,16 +532,17 @@ const AgentNetwork = (() => {
 
   function _drawShockwaves() {
     for (const sw of shockwaves) {
+      const col = sw.color || "#40c4ff";
       ctx.beginPath();
       ctx.arc(sw.x, sw.y, sw.radius, 0, Math.PI * 2);
-      ctx.strokeStyle = _hex2rgba("#40c4ff", sw.alpha);
-      ctx.lineWidth = 2;
+      ctx.strokeStyle = _hex2rgba(col, sw.alpha);
+      ctx.lineWidth = sw.lineWidth || 2;
       ctx.stroke();
 
       // Inner glow
       const grad = ctx.createRadialGradient(sw.x, sw.y, sw.radius * 0.95, sw.x, sw.y, sw.radius);
-      grad.addColorStop(0, "rgba(64,196,255,0)");
-      grad.addColorStop(1, _hex2rgba("#40c4ff", sw.alpha * 0.3));
+      grad.addColorStop(0, _hex2rgba(col, 0));
+      grad.addColorStop(1, _hex2rgba(col, sw.alpha * 0.3));
       ctx.fillStyle = grad;
       ctx.fill();
     }
@@ -488,6 +624,25 @@ const AgentNetwork = (() => {
       }
     }
 
+    // Consensus glow: briefly make ALL connections glow bright (Upgrade 1)
+    if (consensusGlow.active && consensusGlow.alpha > 0.05) {
+      ctx.setLineDash([]);
+      for (let i = 0; i < nodes.length; i++) {
+        for (let j = i + 1; j < nodes.length; j++) {
+          if (nodes[i].tribe !== nodes[j].tribe) continue;
+          const glowCol = consensusGlow.alpha > 0.5 ? "#ffffff" : consensusGlow.color;
+          ctx.strokeStyle = _hex2rgba(glowCol, consensusGlow.alpha * 0.3);
+          ctx.lineWidth = 1.5 * consensusGlow.alpha;
+          ctx.shadowBlur = 12 * consensusGlow.alpha;
+          ctx.shadowColor = glowCol;
+          ctx.beginPath();
+          ctx.moveTo(nodes[i].x, nodes[i].y);
+          ctx.lineTo(nodes[j].x, nodes[j].y);
+          ctx.stroke();
+        }
+      }
+    }
+
     ctx.restore();
   }
 
@@ -535,8 +690,8 @@ const AgentNetwork = (() => {
   function _drawNode(n) {
     const col = DIR_COLORS[n.dir] || "#37474f";
 
-    // Breathing animation
-    const breathe = Math.sin(time * 1.2 + n.breatheOffset) * 1.2;
+    // Breathing animation (Upgrade 2: +-2px over 3s)
+    const breathe = Math.sin(time * (Math.PI * 2 / 3) + n.breatheOffset) * 2;
     const drawR = n.r + breathe;
 
     // Conviction halo (radial gradient glow)
@@ -602,53 +757,89 @@ const AgentNetwork = (() => {
       }
     }
 
-    // Main circle
-    const grad = ctx.createRadialGradient(
-      n.x - drawR * 0.25, n.y - drawR * 0.25, 0,
-      n.x, n.y, drawR
-    );
+    // ── UPGRADE 2: Premium Node Design ───────────────────
+
+    // Outer dashed ring (slowly rotating)
+    ctx.save();
+    const outerR = drawR + 5;
+    const dashRotation = time * 0.3 + n.breatheOffset;
+    ctx.setLineDash([4, 4]);
+    ctx.lineDashOffset = -dashRotation * outerR;
+    ctx.strokeStyle = _hex2rgba(col, n.dir === "NEUTRAL" ? 0.12 : 0.3);
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.arc(n.x, n.y, outerR, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.restore();
+
+    // Inner solid ring
+    ctx.strokeStyle = _hex2rgba(col, n.dir === "NEUTRAL" ? 0.2 : 0.5 + n.glow * 0.3);
+    ctx.lineWidth = n.dir !== "NEUTRAL" ? 2 : 1;
+    ctx.beginPath();
+    ctx.arc(n.x, n.y, drawR + 1, 0, Math.PI * 2);
+    ctx.stroke();
+
+    // Main circle: radial gradient (bright center -> darker edge)
+    const grad = ctx.createRadialGradient(n.x, n.y, 0, n.x, n.y, drawR);
     if (n.dir === "NEUTRAL") {
-      grad.addColorStop(0, "rgba(55, 71, 79, 0.35)");
+      grad.addColorStop(0, "rgba(75, 91, 99, 0.4)");
       grad.addColorStop(1, "rgba(55, 71, 79, 0.1)");
+    } else if (n.dir === "BULL") {
+      grad.addColorStop(0, _hex2rgba("#00ff88", 0.55));
+      grad.addColorStop(1, _hex2rgba("#004d29", 0.25));
     } else {
-      grad.addColorStop(0, _hex2rgba(col, 0.45));
-      grad.addColorStop(1, _hex2rgba(col, 0.15));
+      grad.addColorStop(0, _hex2rgba("#ff4466", 0.55));
+      grad.addColorStop(1, _hex2rgba("#4d0014", 0.25));
     }
 
     ctx.save();
-    ctx.shadowBlur = n.dir !== "NEUTRAL" ? 8 : 0;
+    ctx.shadowBlur = n.dir !== "NEUTRAL" ? 12 : 0;
     ctx.shadowColor = col;
     ctx.fillStyle = grad;
     ctx.beginPath();
     ctx.arc(n.x, n.y, drawR, 0, Math.PI * 2);
     ctx.fill();
-
-    // Border
-    ctx.strokeStyle = _hex2rgba(col, 0.5 + n.glow * 0.5);
-    ctx.lineWidth = n.dir !== "NEUTRAL" ? 1.5 : 1;
-    ctx.stroke();
     ctx.restore();
 
-    // Abbreviation text
-    ctx.fillStyle = _hex2rgba(col, n.dir === "NEUTRAL" ? 0.5 : 0.9);
+    // Conviction ARC (glowing arc around node, like a loading spinner)
+    if (n.conv > 5) {
+      const arcR = drawR + 3;
+      const arcAngle = (n.conv / 100) * Math.PI * 2;
+      const startA = -Math.PI / 2;
+      ctx.save();
+      ctx.shadowBlur = 8;
+      ctx.shadowColor = col;
+      ctx.strokeStyle = _hex2rgba(col, 0.8);
+      ctx.lineWidth = 2.5;
+      ctx.lineCap = "round";
+      ctx.beginPath();
+      ctx.arc(n.x, n.y, arcR, startA, startA + arcAngle);
+      ctx.stroke();
+      ctx.restore();
+    }
+
+    // Abbreviation text (bold white with slight shadow)
+    ctx.save();
+    ctx.shadowBlur = 4;
+    ctx.shadowColor = "rgba(0,0,0,0.6)";
+    ctx.fillStyle = n.dir === "NEUTRAL" ? _hex2rgba("#ffffff", 0.5) : "#ffffff";
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";
-    const fontSize = Math.max(9, drawR * 0.65);
+    const fontSize = Math.max(10, drawR * 0.55);
     ctx.font = `700 ${fontSize}px 'JetBrains Mono', monospace`;
     ctx.fillText(n.abbr, n.x, n.y);
+    ctx.restore();
 
-    // Conviction bar under node
-    if (n.conv > 5) {
-      const barW = drawR * 1.6;
-      const barH = 2;
-      const barX = n.x - barW / 2;
-      const barY = n.y + drawR + 5;
-      ctx.fillStyle = "rgba(255,255,255,0.04)";
-      _roundRect(ctx, barX, barY, barW, barH, 1);
-      ctx.fill();
-      ctx.fillStyle = _hex2rgba(col, 0.6);
-      _roundRect(ctx, barX, barY, barW * (n.conv / 100), barH, 1);
-      ctx.fill();
+    // Short name below node (Upgrade 2)
+    const meta = AGENT_META[n.id];
+    if (meta) {
+      const shortN = _shortName(meta.name);
+      ctx.fillStyle = _hex2rgba(col, n.dir === "NEUTRAL" ? 0.25 : 0.5);
+      ctx.textAlign = "center";
+      ctx.textBaseline = "top";
+      ctx.font = `500 ${Math.max(7, drawR * 0.32)}px 'JetBrains Mono', monospace`;
+      ctx.fillText(shortN, n.x, n.y + drawR + 8);
     }
   }
 
@@ -705,6 +896,153 @@ const AgentNetwork = (() => {
     ctx.lineTo(x, y + r);
     ctx.quadraticCurveTo(x, y, x + r, y);
     ctx.closePath();
+  }
+
+  // ── Hover Card (Upgrade 2) ──────────────────────────────
+  function _initHoverCard() {
+    hoverCardEl = document.getElementById("agent-hover-card");
+    if (!hoverCardEl || !canvas) return;
+
+    canvas.addEventListener("mousemove", (e) => {
+      const rect = canvas.getBoundingClientRect();
+      const mx = e.clientX - rect.left;
+      const my = e.clientY - rect.top;
+
+      let found = null;
+      for (const n of nodes) {
+        const dx = mx - n.x;
+        const dy = my - n.y;
+        if (dx * dx + dy * dy < (n.r + 6) * (n.r + 6)) {
+          found = n;
+          break;
+        }
+      }
+
+      if (found) {
+        if (hoveredNode !== found) {
+          hoveredNode = found;
+          _showHoverCard(found, e.clientX, e.clientY, rect);
+        } else {
+          // Update position
+          _positionHoverCard(e.clientX, e.clientY, rect);
+        }
+      } else {
+        if (hoveredNode) {
+          hoveredNode = null;
+          hoverCardEl.classList.remove("visible");
+        }
+      }
+    });
+
+    canvas.addEventListener("mouseleave", () => {
+      hoveredNode = null;
+      if (hoverCardEl) hoverCardEl.classList.remove("visible");
+    });
+  }
+
+  function _showHoverCard(n, cx, cy, canvasRect) {
+    if (!hoverCardEl) return;
+    const meta = AGENT_META[n.id] || { name: n.name, tribe: n.tribe, strategy: "" };
+    const dirClass = n.dir === "BULL" ? "border-bull" : n.dir === "BEAR" ? "border-bear" : "border-neutral";
+    const dirColor = n.dir === "BULL" ? "bull" : n.dir === "BEAR" ? "bear" : "neut";
+
+    hoverCardEl.className = "agent-hover-card visible " + dirClass;
+    hoverCardEl.innerHTML = `
+      <div class="ahc-name">${_escHtml(meta.name)}</div>
+      <div class="ahc-tribe">${_escHtml(meta.tribe)}</div>
+      <div class="ahc-strategy">${_escHtml(meta.strategy)}</div>
+      <div class="ahc-vote">
+        <span class="${dirColor}">${n.dir}</span>
+        <span style="color:var(--text-dim);">${Math.round(n.conv)}% conviction</span>
+      </div>
+      ${n.reasoning ? `<div class="ahc-reasoning">${_escHtml(n.reasoning.length > 140 ? n.reasoning.slice(0, 137) + "..." : n.reasoning)}</div>` : ""}
+    `;
+    _positionHoverCard(cx, cy, canvasRect);
+  }
+
+  function _positionHoverCard(cx, cy, canvasRect) {
+    if (!hoverCardEl) return;
+    const wrap = canvas.parentElement;
+    const wrapRect = wrap.getBoundingClientRect();
+    let left = cx - wrapRect.left + 16;
+    let top = cy - wrapRect.top - 10;
+
+    // Keep within wrap bounds
+    const cardW = hoverCardEl.offsetWidth || 240;
+    const cardH = hoverCardEl.offsetHeight || 160;
+    if (left + cardW > wrapRect.width) left = cx - wrapRect.left - cardW - 16;
+    if (top + cardH > wrapRect.height) top = wrapRect.height - cardH - 8;
+    if (top < 0) top = 8;
+
+    hoverCardEl.style.left = left + "px";
+    hoverCardEl.style.top = top + "px";
+  }
+
+  function _escHtml(s) {
+    if (!s) return "";
+    const d = document.createElement("div");
+    d.textContent = String(s);
+    return d.innerHTML;
+  }
+
+  // ── Cinematic Mode (Upgrade 3) ─────────────────────────
+  function _initCinematicMode() {
+    const btn = document.getElementById("cinematic-btn");
+    if (btn) {
+      btn.addEventListener("click", (e) => { e.preventDefault(); _toggleCinematic(); });
+    }
+
+    document.addEventListener("keydown", (e) => {
+      // Don't capture if user is typing in an input
+      if (e.target.tagName === "INPUT" || e.target.tagName === "TEXTAREA") return;
+      if (e.key === "f" || e.key === "F") {
+        _toggleCinematic();
+      }
+      if (e.key === "Escape" && isCinematic) {
+        _toggleCinematic();
+      }
+    });
+
+    // Keep cinematic overlays updated
+    document.addEventListener("market:update", (e) => _updateCinematicOverlay(e.detail));
+    document.addEventListener("consensus:reached", (e) => _updateCinematicConsensus(e.detail));
+    document.addEventListener("state:full", (e) => {
+      if (e.detail.market_context) _updateCinematicOverlay(e.detail.market_context);
+      if (e.detail.consensus) _updateCinematicConsensus(e.detail.consensus);
+    });
+  }
+
+  function _toggleCinematic() {
+    isCinematic = !isCinematic;
+    document.body.classList.toggle("cinematic-mode", isCinematic);
+
+    // Resize canvas after layout change
+    setTimeout(() => {
+      _resize();
+      _layoutNodes();
+    }, 50);
+  }
+
+  function _updateCinematicOverlay(ctx) {
+    if (!ctx) return;
+    const spx = document.getElementById("cin-spx");
+    const vix = document.getElementById("cin-vix");
+    const regime = document.getElementById("cin-regime");
+    if (spx) spx.textContent = "SPX " + (parseFloat(ctx.spx_price) || 0).toFixed(2);
+    if (vix) vix.textContent = "VIX " + (parseFloat(ctx.vix_level) || 0).toFixed(2);
+    if (regime && ctx.market_regime) regime.textContent = ctx.market_regime;
+  }
+
+  function _updateCinematicConsensus(c) {
+    if (!c) return;
+    const dir = document.getElementById("cin-direction");
+    const conf = document.getElementById("cin-confidence");
+    const d = (c.direction || "").toUpperCase();
+    if (dir) {
+      dir.textContent = d || "--";
+      dir.style.color = d === "BULL" ? "var(--bull)" : d === "BEAR" ? "var(--bear)" : "var(--text-dim)";
+    }
+    if (conf) conf.textContent = (parseFloat(c.confidence) || 0).toFixed(0) + "% confidence";
   }
 
   // ── Public ──────────────────────────────────────────────

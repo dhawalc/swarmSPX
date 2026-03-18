@@ -74,9 +74,12 @@
     <div class="card-header">
       <span class="card-header-icon">&#9673;</span> Agent Network
       <span class="card-header-stat" id="network-stat"></span>
+      <button id="cinematic-btn" class="cinematic-btn" title="Cinematic Mode (F)">&#x26F6;</button>
     </div>
     <div id="agent-canvas-wrap">
       <canvas id="agent-canvas"></canvas>
+      <!-- Agent hover card (Upgrade 2) -->
+      <div id="agent-hover-card" class="agent-hover-card"></div>
     </div>
   </section>
 
@@ -144,6 +147,20 @@
   </section>
 
 </main>
+
+<!-- Cinematic Mode Overlay (Upgrade 3) -->
+<div id="cinematic-overlay" class="cinematic-overlay">
+  <div class="cinematic-top-right">ESC to exit &bull; SWARMSPX</div>
+  <div class="cinematic-top-left" id="cinematic-market">
+    <span id="cin-spx">SPX --</span>
+    <span id="cin-vix">VIX --</span>
+    <span id="cin-regime">--</span>
+  </div>
+  <div class="cinematic-bottom-center" id="cinematic-consensus">
+    <span id="cin-direction">--</span>
+    <span id="cin-confidence">--</span>
+  </div>
+</div>
 
 <!-- ── Scripts (order matters) ─────────────────────────────── -->
 <script src="/static/js/swarm.js"></script>
