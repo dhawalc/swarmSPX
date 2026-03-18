@@ -71,8 +71,13 @@ def _run_cli(args):
 
 
 def _run_tui(args):
-    from swarmspx.ui.tui.app import SwarmTUI
-    app = SwarmTUI(settings_path=args.config)
+    from swarmspx.events import EventBus
+    from swarmspx.engine import SwarmSPXEngine
+    from swarmspx.ui.tui.app import SwarmSPXApp
+
+    bus = EventBus()
+    engine = SwarmSPXEngine(settings_path=args.config, bus=bus)
+    app = SwarmSPXApp(bus=bus, engine=engine)
     app.run()
 
 

@@ -1,0 +1,273 @@
+/* SwarmSPX Trading Terminal - Dark Professional Theme */
+
+Screen {
+    background: #0a0a0f;
+    color: #c0c0c0;
+}
+
+/* ── Top: Market Header Bar ── */
+
+#market-header {
+    dock: top;
+    height: 3;
+    background: #0d0d14;
+    border-bottom: solid #1a1a2e;
+    padding: 0 2;
+    layout: horizontal;
+}
+
+#spx-price {
+    width: 22;
+    content-align: left middle;
+    text-style: bold;
+}
+
+#spx-change {
+    width: 14;
+    content-align: left middle;
+}
+
+#vix-display {
+    width: 16;
+    content-align: left middle;
+}
+
+#regime-badge {
+    width: 20;
+    content-align: center middle;
+    text-style: bold;
+}
+
+#cycle-timer {
+    width: 1fr;
+    content-align: right middle;
+    color: #555570;
+}
+
+/* ── Main Layout ── */
+
+#main-container {
+    layout: horizontal;
+    height: 1fr;
+}
+
+/* ── Left: Agent Heatmap ── */
+
+#agent-heatmap-panel {
+    width: 52;
+    border: double #1a1a2e;
+    border-title-color: #7070a0;
+    background: #0c0c14;
+    padding: 0 1;
+}
+
+#heatmap-grid {
+    layout: horizontal;
+    height: 1fr;
+}
+
+.tribe-column {
+    width: 1fr;
+    height: auto;
+    padding: 0;
+}
+
+.tribe-header {
+    text-align: center;
+    text-style: bold;
+    height: 1;
+    color: #7070a0;
+    background: #12121c;
+}
+
+.agent-cell {
+    height: 1;
+    padding: 0 0;
+    color: #555570;
+}
+
+.agent-cell.bull {
+    color: #00e676;
+}
+
+.agent-cell.bear {
+    color: #ff1744;
+}
+
+.agent-cell.neutral {
+    color: #555570;
+}
+
+.agent-cell.flipped {
+    text-style: bold reverse;
+}
+
+.agent-cell.active {
+    text-style: bold;
+    background: #1a1a2e;
+}
+
+/* ── Center: Trade Card Hero Panel ── */
+
+#trade-card-panel {
+    width: 1fr;
+    min-width: 50;
+    border: double #1a1a2e;
+    border-title-color: #ffd740;
+    background: #0c0c14;
+    padding: 1 2;
+}
+
+#trade-direction {
+    text-align: center;
+    text-style: bold;
+    height: 3;
+    content-align: center middle;
+}
+
+#trade-action {
+    text-align: center;
+    text-style: bold;
+    height: 2;
+    content-align: center middle;
+    color: #ffd740;
+}
+
+#trade-levels {
+    height: 3;
+    padding: 0 2;
+    color: #a0a0b0;
+}
+
+#trade-rationale {
+    height: auto;
+    max-height: 8;
+    padding: 1 2;
+    color: #8080a0;
+}
+
+#trade-alerts {
+    height: auto;
+    padding: 0 2;
+    color: #ff9100;
+}
+
+#trade-waiting {
+    height: 1fr;
+    content-align: center middle;
+    color: #333350;
+    text-style: italic;
+}
+
+/* ── Right Column ── */
+
+#right-column {
+    width: 36;
+    layout: vertical;
+}
+
+/* ── Right Top: Round Progression ── */
+
+#round-progress-panel {
+    height: 1fr;
+    border: double #1a1a2e;
+    border-title-color: #7070a0;
+    background: #0c0c14;
+    padding: 1 1;
+}
+
+.round-row {
+    height: 2;
+    layout: horizontal;
+    padding: 0 0;
+}
+
+.round-label {
+    width: 10;
+    content-align: left middle;
+    color: #555570;
+}
+
+.round-label.active-round {
+    color: #ffd740;
+    text-style: bold;
+}
+
+.round-label.completed-round {
+    color: #7070a0;
+}
+
+.round-bar {
+    width: 1fr;
+    height: 1;
+    background: #16162a;
+    content-align: left middle;
+}
+
+/* ── Right Bottom: Consensus Gauge ── */
+
+#consensus-panel {
+    height: 14;
+    border: double #1a1a2e;
+    border-title-color: #7070a0;
+    background: #0c0c14;
+    padding: 1 1;
+}
+
+#confidence-label {
+    text-align: center;
+    text-style: bold;
+    height: 2;
+    content-align: center middle;
+}
+
+#confidence-bar-container {
+    height: 2;
+    padding: 0 1;
+}
+
+#confidence-bar {
+    height: 1;
+    background: #16162a;
+    content-align: left middle;
+}
+
+#agreement-label {
+    text-align: center;
+    height: 1;
+    color: #7070a0;
+}
+
+#vote-breakdown {
+    height: 3;
+    padding: 0 1;
+    color: #a0a0b0;
+}
+
+#consensus-alerts {
+    height: auto;
+    padding: 0 1;
+    color: #ff9100;
+}
+
+/* ── Bottom Status Bar ── */
+
+#status-bar {
+    dock: bottom;
+    height: 1;
+    background: #0d0d14;
+    border-top: solid #1a1a2e;
+    padding: 0 2;
+    layout: horizontal;
+    color: #444460;
+}
+
+#status-left {
+    width: 1fr;
+    content-align: left middle;
+}
+
+#status-right {
+    width: 1fr;
+    content-align: right middle;
+}
