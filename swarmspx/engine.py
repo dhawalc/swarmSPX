@@ -35,11 +35,13 @@ class SwarmSPXEngine:
             num_rounds=self.settings["simulation"]["num_rounds"],
             bus=self.bus,
         )
-        synth_url, synth_key, synth_model = resolve_synthesis_model(self.settings)
+        synth_cfg = resolve_synthesis_model(self.settings)
         self.reporter = ReportGenerator(
-            ollama_base_url=synth_url,
-            model=synth_model,
-            api_key=synth_key,
+            ollama_base_url=synth_cfg["base_url"],
+            model=synth_cfg["model"],
+            api_key=synth_cfg["api_key"],
+            use_claude_cli=synth_cfg["use_claude_cli"],
+            claude_model=synth_cfg["claude_model"],
         )
         self.db = Database(self.settings["database"]["path"])
         self.db.init_schema()

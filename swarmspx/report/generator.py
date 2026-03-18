@@ -4,16 +4,23 @@ from openai import AsyncOpenAI
 from datetime import datetime
 
 class ReportGenerator:
-    """Uses Qwen 32B to synthesize agent consensus into a trade card."""
+    """Synthesizes agent consensus into a trade card."""
 
     def __init__(
         self,
         ollama_base_url: str = "http://localhost:11434/v1",
         model: str = "qwen2.5:32b",
         api_key: str = "ollama",
+        use_claude_cli: bool = False,
+        claude_model: str = "sonnet",
     ):
-        self.client = AsyncOpenAI(base_url=ollama_base_url, api_key=api_key)
         self.model = model
+        self.use_claude_cli = use_claude_cli
+        self.claude_model = claude_model
+        if not use_claude_cli:
+            self.client = AsyncOpenAI(base_url=ollama_base_url, api_key=api_key)
+        else:
+            self.client = None
 
     async def generate(self, consensus: dict, market_context: dict, aoms_memories: list[dict] = None) -> dict:
         """Generate a structured trade card from swarm consensus."""
@@ -59,13 +66,19 @@ Respond with ONLY valid JSON:
 }}"""
 
         try:
-            response = await self.client.chat.completions.create(
-                model=self.model,
-                messages=[{"role": "user", "content": prompt}],
-                temperature=0.3,
-                max_tokens=400,
-            )
-            content = response.choices[0].message.content.strip()
+            if self.use_claude_cli:
+                from swarmspx.claude_client import claude_chat
+                content = await claude_chat(prompt, model=self.claude_model)
+                if not content:
+                    raise RuntimeError("Claude CLI returned empty response")
+            else:
+                response = await self.client.chat.completions.create(
+                    model=self.model,
+                    messages=[{"role": "user", "content": prompt}],
+                    temperature=0.3,
+                    max_tokens=400,
+                )
+                content = response.choices[0].message.content.strip()
             json_match = re.search(r'\{.*\}', content, re.DOTALL)
             if json_match:
                 trade_data = json.loads(json_match.group())

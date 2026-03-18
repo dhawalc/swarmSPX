@@ -6,32 +6,31 @@ ollama:
   api_key: "ollama"
 
 # --- Hybrid model routing ---
+# claude_cli provider uses Max plan OAuth via `claude` CLI subprocess
+# No API key needed — same auth as Claude Code
 providers:
   ollama:
     base_url: "http://localhost:11434/v1"
     api_key: "ollama"
-  anthropic:
-    base_url: "https://api.anthropic.com/v1/"
-    api_key_env: "ANTHROPIC_API_KEY"
 
 models:
   fast_local:
     provider: ollama
     model: "llama3.1:8b"
-  sonnet:
-    provider: anthropic
-    model: "claude-sonnet-4-6-20250514"
-  opus:
-    provider: anthropic
-    model: "claude-opus-4-0-20250514"
+  claude_sonnet:
+    provider: claude_cli
+    model: "sonnet"
+  claude_opus:
+    provider: claude_cli
+    model: "opus"
 
 tribe_models:
-  technical: fast_local
-  macro: fast_local
-  sentiment: fast_local
-  strategists: sonnet
+  technical: fast_local      # 6 agents — Ollama local, fast
+  macro: fast_local          # 6 agents — Ollama local, fast
+  sentiment: fast_local      # 6 agents — Ollama local, fast
+  strategists: claude_sonnet # 6 agents — Claude Sonnet via CLI (Max plan OAuth)
 
-synthesis_model: opus
+synthesis_model: claude_sonnet  # trade card synthesis via Claude CLI
 
 aoms:
   base_url: "http://localhost:9100"

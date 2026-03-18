@@ -34,7 +34,25 @@ async def test_agent_thinks_and_returns_vote():
         assert vote.direction in ["BULL", "BEAR", "NEUTRAL"]
         assert 0 <= vote.conviction <= 100
 
-@patch.dict("os.environ", {"ANTHROPIC_API_KEY": "test-key-for-testing"})
+@pytest.mark.asyncio
+async def test_claude_cli_agent_thinks():
+    with patch("swarmspx.claude_client.claude_chat", new_callable=AsyncMock) as mock_claude:
+        mock_claude.return_value = '{"direction":"BEAR","conviction":85,"reasoning":"VIX elevated","trade_idea":"BUY SPX 5790P 0DTE"}'
+        agent = TraderAgent(
+            agent_id="risk_rick",
+            name="Risk Rick",
+            persona="You manage risk.",
+            specialty="risk_mgmt",
+            bias="conservative",
+            use_claude_cli=True,
+            claude_model="sonnet",
+        )
+        market_context = {"spx_price": 5800.0, "vix_level": 22.5, "market_regime": "elevated_vol"}
+        vote = await agent.think(market_context, round_num=1, peers_votes=[])
+        assert vote.direction == "BEAR"
+        assert vote.conviction == 85
+        mock_claude.assert_called_once()
+
 def test_forge_creates_all_24_agents():
     forge = AgentForge("config/agents.yaml")
     agents = forge.create_all()
@@ -43,15 +61,14 @@ def test_forge_creates_all_24_agents():
     assert "vwap_victor" in ids
     assert "synthesis_syd" in ids
 
-@patch.dict("os.environ", {"ANTHROPIC_API_KEY": "test-key-for-testing"})
-def test_forge_assigns_different_models_per_tribe():
+def test_forge_assigns_claude_cli_to_strategists():
     forge = AgentForge("config/agents.yaml")
     agents = forge.create_all()
-    # Strategists should use Sonnet
     strategists = [a for a in agents if a.tribe == "strategists"]
     assert len(strategists) == 6
-    assert all("claude" in a.model for a in strategists)
-    # Others should use local Llama
+    assert all(a.use_claude_cli is True for a in strategists)
+    assert all(a.claude_model == "sonnet" for a in strategists)
+    # Others should use Ollama
     others = [a for a in agents if a.tribe != "strategists"]
     assert len(others) == 18
-    assert all("llama" in a.model for a in others)
+    assert all(a.use_claude_cli is False for a in others)

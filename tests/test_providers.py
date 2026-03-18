@@ -5,71 +5,61 @@ from swarmspx.providers import resolve_model, resolve_tribe_model, resolve_synth
 SETTINGS = {
     "providers": {
         "ollama": {"base_url": "http://localhost:11434/v1", "api_key": "ollama"},
-        "anthropic": {"base_url": "https://api.anthropic.com/v1/", "api_key_env": "ANTHROPIC_API_KEY"},
     },
     "models": {
         "fast_local": {"provider": "ollama", "model": "llama3.1:8b"},
-        "sonnet": {"provider": "anthropic", "model": "claude-sonnet-4-6-20250514"},
-        "opus": {"provider": "anthropic", "model": "claude-opus-4-0-20250514"},
+        "claude_sonnet": {"provider": "claude_cli", "model": "sonnet"},
+        "claude_opus": {"provider": "claude_cli", "model": "opus"},
     },
     "tribe_models": {
         "technical": "fast_local",
         "macro": "fast_local",
         "sentiment": "fast_local",
-        "strategists": "sonnet",
+        "strategists": "claude_sonnet",
     },
-    "synthesis_model": "opus",
+    "synthesis_model": "claude_sonnet",
     "ollama": {"base_url": "http://localhost:11434/v1", "api_key": "ollama", "agent_model": "llama3.1:8b", "synthesis_model": "phi4:14b"},
 }
 
 
-@patch.dict("os.environ", {"ANTHROPIC_API_KEY": "sk-test-123"})
 def test_resolve_ollama_model():
-    url, key, model = resolve_model("fast_local", SETTINGS)
-    assert url == "http://localhost:11434/v1"
-    assert key == "ollama"
-    assert model == "llama3.1:8b"
+    cfg = resolve_model("fast_local", SETTINGS)
+    assert cfg["base_url"] == "http://localhost:11434/v1"
+    assert cfg["api_key"] == "ollama"
+    assert cfg["model"] == "llama3.1:8b"
+    assert cfg["use_claude_cli"] is False
 
 
-@patch.dict("os.environ", {"ANTHROPIC_API_KEY": "sk-test-123"})
-def test_resolve_anthropic_model():
-    url, key, model = resolve_model("sonnet", SETTINGS)
-    assert url == "https://api.anthropic.com/v1/"
-    assert key == "sk-test-123"
-    assert "claude-sonnet" in model
+def test_resolve_claude_cli_model():
+    cfg = resolve_model("claude_sonnet", SETTINGS)
+    assert cfg["use_claude_cli"] is True
+    assert cfg["claude_model"] == "sonnet"
+    assert cfg["model"] == "sonnet"
 
 
-def test_resolve_anthropic_missing_key_raises():
-    with patch.dict("os.environ", {}, clear=True):
-        with pytest.raises(ValueError, match="ANTHROPIC_API_KEY"):
-            resolve_model("sonnet", SETTINGS)
+def test_resolve_tribe_model_strategists_uses_claude():
+    cfg = resolve_tribe_model("strategists", SETTINGS)
+    assert cfg["use_claude_cli"] is True
+    assert cfg["claude_model"] == "sonnet"
 
 
-@patch.dict("os.environ", {"ANTHROPIC_API_KEY": "sk-test-123"})
-def test_resolve_tribe_model_strategists():
-    url, key, model = resolve_tribe_model("strategists", SETTINGS)
-    assert "anthropic" in url
-    assert "claude" in model
-
-
-@patch.dict("os.environ", {"ANTHROPIC_API_KEY": "sk-test-123"})
-def test_resolve_tribe_model_technical():
-    url, key, model = resolve_tribe_model("technical", SETTINGS)
-    assert "11434" in url
-    assert model == "llama3.1:8b"
+def test_resolve_tribe_model_technical_uses_ollama():
+    cfg = resolve_tribe_model("technical", SETTINGS)
+    assert cfg["use_claude_cli"] is False
+    assert cfg["model"] == "llama3.1:8b"
 
 
 def test_backward_compat_no_providers():
     old_settings = {
         "ollama": {"base_url": "http://localhost:11434/v1", "api_key": "ollama", "agent_model": "llama3.1:8b"},
     }
-    url, key, model = resolve_model("anything", old_settings)
-    assert url == "http://localhost:11434/v1"
-    assert model == "llama3.1:8b"
+    cfg = resolve_model("anything", old_settings)
+    assert cfg["base_url"] == "http://localhost:11434/v1"
+    assert cfg["model"] == "llama3.1:8b"
+    assert cfg["use_claude_cli"] is False
 
 
-@patch.dict("os.environ", {"ANTHROPIC_API_KEY": "sk-test-123"})
-def test_resolve_synthesis_model():
-    url, key, model = resolve_synthesis_model(SETTINGS)
-    assert "anthropic" in url
-    assert "opus" in model
+def test_resolve_synthesis_model_claude():
+    cfg = resolve_synthesis_model(SETTINGS)
+    assert cfg["use_claude_cli"] is True
+    assert cfg["claude_model"] == "sonnet"

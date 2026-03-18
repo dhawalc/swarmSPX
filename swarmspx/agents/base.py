@@ -27,6 +27,8 @@ class TraderAgent:
         model: str = "llama3.1:8b",
         tribe: str = "unknown",
         api_key: str = "ollama",
+        use_claude_cli: bool = False,
+        claude_model: str = "sonnet",
     ):
         self.agent_id = agent_id
         self.name = name
@@ -35,7 +37,12 @@ class TraderAgent:
         self.bias = bias
         self.model = model
         self.tribe = tribe
-        self.client = AsyncOpenAI(base_url=ollama_base_url, api_key=api_key)
+        self.use_claude_cli = use_claude_cli
+        self.claude_model = claude_model
+        if not use_claude_cli:
+            self.client = AsyncOpenAI(base_url=ollama_base_url, api_key=api_key)
+        else:
+            self.client = None
         self.last_vote: Optional[AgentVote] = None
 
     def _build_prompt(
@@ -60,7 +67,6 @@ Regime: {market_context.get('market_regime', 'unknown')}
                 vote_counts[v.direction] = vote_counts.get(v.direction, 0) + 1
             peers_str = f"\nOther traders' current positions: {vote_counts['BULL']} BULL, {vote_counts['BEAR']} BEAR, {vote_counts['NEUTRAL']} NEUTRAL\n"
             if round_num > 1:
-                # Show strongest bull and bear case
                 bulls = [v for v in peers_votes if v.direction == "BULL"]
                 bears = [v for v in peers_votes if v.direction == "BEAR"]
                 if bulls:
@@ -104,14 +110,12 @@ Respond with ONLY valid JSON, no other text:
         """Analyze market and produce a vote."""
         prompt = self._build_prompt(market_context, round_num, peers_votes, memory_context)
         try:
-            response = await self.client.chat.completions.create(
-                model=self.model,
-                messages=[{"role": "user", "content": prompt}],
-                temperature=0.7,
-                max_tokens=300,
-            )
-            content = response.choices[0].message.content.strip()
-            # Extract JSON from response
+            if self.use_claude_cli:
+                content = await self._think_claude(prompt)
+            else:
+                content = await self._think_openai(prompt)
+
+            # Parse JSON from response
             json_match = re.search(r'\{.*\}', content, re.DOTALL)
             if json_match:
                 data = json.loads(json_match.group())
@@ -135,7 +139,6 @@ Respond with ONLY valid JSON, no other text:
             return vote
 
         except Exception as e:
-            # Fallback vote on parse error
             vote = AgentVote(
                 agent_id=self.agent_id,
                 direction="NEUTRAL",
@@ -145,3 +148,21 @@ Respond with ONLY valid JSON, no other text:
             )
             self.last_vote = vote
             return vote
+
+    async def _think_openai(self, prompt: str) -> str:
+        """Get response via OpenAI-compatible API (Ollama)."""
+        response = await self.client.chat.completions.create(
+            model=self.model,
+            messages=[{"role": "user", "content": prompt}],
+            temperature=0.7,
+            max_tokens=300,
+        )
+        return response.choices[0].message.content.strip()
+
+    async def _think_claude(self, prompt: str) -> str:
+        """Get response via Claude CLI subprocess (Max plan OAuth)."""
+        from swarmspx.claude_client import claude_chat
+        response = await claude_chat(prompt, model=self.claude_model)
+        if not response:
+            raise RuntimeError("Claude CLI returned empty response")
+        return response

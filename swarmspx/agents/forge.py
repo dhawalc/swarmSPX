@@ -18,7 +18,7 @@ class AgentForge:
     def create_all(self) -> list[TraderAgent]:
         agents = []
         for tribe_name, tribe_agents in self.agent_config["tribes"].items():
-            base_url, api_key, model = resolve_tribe_model(tribe_name, self.settings)
+            mcfg = resolve_tribe_model(tribe_name, self.settings)
             for agent_def in tribe_agents:
                 agent = TraderAgent(
                     agent_id=agent_def["id"],
@@ -26,10 +26,12 @@ class AgentForge:
                     persona=agent_def["persona"],
                     specialty=agent_def["specialty"],
                     bias=agent_def["bias"],
-                    ollama_base_url=base_url,
-                    model=model,
+                    ollama_base_url=mcfg["base_url"],
+                    model=mcfg["model"],
                     tribe=tribe_name,
-                    api_key=api_key,
+                    api_key=mcfg["api_key"],
+                    use_claude_cli=mcfg["use_claude_cli"],
+                    claude_model=mcfg["claude_model"],
                 )
                 agents.append(agent)
         return agents
