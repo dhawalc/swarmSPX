@@ -34,6 +34,7 @@ async def test_agent_thinks_and_returns_vote():
         assert vote.direction in ["BULL", "BEAR", "NEUTRAL"]
         assert 0 <= vote.conviction <= 100
 
+@patch.dict("os.environ", {"ANTHROPIC_API_KEY": "test-key-for-testing"})
 def test_forge_creates_all_24_agents():
     forge = AgentForge("config/agents.yaml")
     agents = forge.create_all()
@@ -41,3 +42,16 @@ def test_forge_creates_all_24_agents():
     ids = [a.agent_id for a in agents]
     assert "vwap_victor" in ids
     assert "synthesis_syd" in ids
+
+@patch.dict("os.environ", {"ANTHROPIC_API_KEY": "test-key-for-testing"})
+def test_forge_assigns_different_models_per_tribe():
+    forge = AgentForge("config/agents.yaml")
+    agents = forge.create_all()
+    # Strategists should use Sonnet
+    strategists = [a for a in agents if a.tribe == "strategists"]
+    assert len(strategists) == 6
+    assert all("claude" in a.model for a in strategists)
+    # Others should use local Llama
+    others = [a for a in agents if a.tribe != "strategists"]
+    assert len(others) == 18
+    assert all("llama" in a.model for a in others)

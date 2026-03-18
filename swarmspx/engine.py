@@ -6,6 +6,7 @@ from swarmspx.ingest.market_data import MarketDataFetcher
 from swarmspx.agents.forge import AgentForge
 from swarmspx.simulation.pit import TradingPit
 from swarmspx.report.generator import ReportGenerator
+from swarmspx.providers import resolve_synthesis_model
 from swarmspx.memory import AOMemory
 from swarmspx.db import Database
 from swarmspx.events import (
@@ -34,9 +35,11 @@ class SwarmSPXEngine:
             num_rounds=self.settings["simulation"]["num_rounds"],
             bus=self.bus,
         )
+        synth_url, synth_key, synth_model = resolve_synthesis_model(self.settings)
         self.reporter = ReportGenerator(
-            ollama_base_url=self.settings["ollama"]["base_url"],
-            model=self.settings["ollama"]["synthesis_model"]
+            ollama_base_url=synth_url,
+            model=synth_model,
+            api_key=synth_key,
         )
         self.db = Database(self.settings["database"]["path"])
         self.db.init_schema()

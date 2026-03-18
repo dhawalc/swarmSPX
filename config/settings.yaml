@@ -1,8 +1,37 @@
+# Legacy fallback (used if providers/models sections missing)
 ollama:
   base_url: "http://localhost:11434/v1"
-  agent_model: "llama3.1:8b"        # fast, for 24-agent chatter
-  synthesis_model: "phi4:14b"     # heavyweight, for final report
-  api_key: "ollama"                   # required by openai client, any value
+  agent_model: "llama3.1:8b"
+  synthesis_model: "phi4:14b"
+  api_key: "ollama"
+
+# --- Hybrid model routing ---
+providers:
+  ollama:
+    base_url: "http://localhost:11434/v1"
+    api_key: "ollama"
+  anthropic:
+    base_url: "https://api.anthropic.com/v1/"
+    api_key_env: "ANTHROPIC_API_KEY"
+
+models:
+  fast_local:
+    provider: ollama
+    model: "llama3.1:8b"
+  sonnet:
+    provider: anthropic
+    model: "claude-sonnet-4-6-20250514"
+  opus:
+    provider: anthropic
+    model: "claude-opus-4-0-20250514"
+
+tribe_models:
+  technical: fast_local
+  macro: fast_local
+  sentiment: fast_local
+  strategists: sonnet
+
+synthesis_model: opus
 
 aoms:
   base_url: "http://localhost:9100"

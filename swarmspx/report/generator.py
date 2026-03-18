@@ -10,8 +10,9 @@ class ReportGenerator:
         self,
         ollama_base_url: str = "http://localhost:11434/v1",
         model: str = "qwen2.5:32b",
+        api_key: str = "ollama",
     ):
-        self.client = AsyncOpenAI(base_url=ollama_base_url, api_key="ollama")
+        self.client = AsyncOpenAI(base_url=ollama_base_url, api_key=api_key)
         self.model = model
 
     async def generate(self, consensus: dict, market_context: dict, aoms_memories: list[dict] = None) -> dict:

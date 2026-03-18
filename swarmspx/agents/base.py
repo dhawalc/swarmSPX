@@ -26,6 +26,7 @@ class TraderAgent:
         ollama_base_url: str = "http://localhost:11434/v1",
         model: str = "llama3.1:8b",
         tribe: str = "unknown",
+        api_key: str = "ollama",
     ):
         self.agent_id = agent_id
         self.name = name
@@ -34,7 +35,7 @@ class TraderAgent:
         self.bias = bias
         self.model = model
         self.tribe = tribe
-        self.client = AsyncOpenAI(base_url=ollama_base_url, api_key="ollama")
+        self.client = AsyncOpenAI(base_url=ollama_base_url, api_key=api_key)
         self.last_vote: Optional[AgentVote] = None
 
     def _build_prompt(
