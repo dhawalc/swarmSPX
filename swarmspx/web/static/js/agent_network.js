@@ -1,6 +1,7 @@
 /* ============================================================
-   SwarmSPX — Agent Network Canvas Visualization
-   24 agents in 4 tribal clusters, animated with votes
+   SwarmSPX — Neural Agent Network Canvas Visualization
+   24 agents in 4 tribal diamond clusters with neural connections,
+   data particles, thought bubbles, shockwaves, and ambient effects
    ============================================================ */
 
 "use strict";
@@ -13,49 +14,59 @@ const AgentNetwork = (() => {
       color: "#448aff",
       agents: ["vwap_victor","gamma_gary","delta_dawn","momentum_mike","level_lucy","tick_tina"],
       names:  ["VWAP Victor","Gamma Gary","Delta Dawn","Momentum Mike","Level Lucy","Tick Tina"],
+      abbr:   ["VV","GG","DD","MM","LL","TT"],
     },
     macro: {
       label: "MACRO",
       color: "#ab47bc",
       agents: ["fed_fred","flow_fiona","vix_vinny","gex_gina","putcall_pete","breadth_brad"],
       names:  ["Fed Fred","Flow Fiona","VIX Vinny","GEX Gina","PutCall Pete","Breadth Brad"],
+      abbr:   ["FF","FF","VV","GG","PP","BB"],
     },
     sentiment: {
       label: "SENTIMENT",
       color: "#ff7043",
       agents: ["twitter_tom","contrarian_carl","fear_felicia","news_nancy","retail_ray","whale_wanda"],
       names:  ["Twitter Tom","Contrarian Carl","Fear Felicia","News Nancy","Retail Ray","Whale Wanda"],
+      abbr:   ["TT","CC","FF","NN","RR","WW"],
     },
     strategists: {
       label: "STRATEGISTS",
       color: "#26c6da",
       agents: ["calendar_cal","spread_sam","scalp_steve","swing_sarah","risk_rick","synthesis_syd"],
       names:  ["Calendar Cal","Spread Sam","Scalp Steve","Swing Sarah","Risk Rick","Synthesis Syd"],
+      abbr:   ["CC","SS","SS","SS","RR","SS"],
     },
   };
 
   const DIR_COLORS = {
     BULL: "#00e676", bull: "#00e676",
     BEAR: "#ff1744", bear: "#ff1744",
-    NEUTRAL: "#78909c", neutral: "#78909c",
+    NEUTRAL: "#37474f", neutral: "#37474f",
   };
 
   // ── State ───────────────────────────────────────────────
   let canvas, ctx;
   let W, H, dpr;
-  let nodes = [];       // { id, name, tribe, tribeColor, x, y, tx, ty, r, dir, conv, glow, ring, ringTime, initial }
-  let animId = null;
+  let nodes = [];
+  let particles = [];       // Background ambient particles
+  let dataParticles = [];   // Particles flowing along connections
+  let thoughtBubbles = [];  // Floating text near agents
+  let shockwaves = [];      // Round-complete shockwave effects
   let time = 0;
+  let lastTime = 0;
 
   // ── Init ────────────────────────────────────────────────
-  function init() {
-    canvas = document.getElementById("agent-canvas");
+  function init(canvasId) {
+    canvas = document.getElementById(canvasId || "agent-canvas");
     if (!canvas) return;
     ctx = canvas.getContext("2d");
 
     _resize();
     _buildNodes();
+    _initAmbientParticles();
     _listen();
+    lastTime = performance.now();
     _loop();
 
     window.addEventListener("resize", () => { _resize(); _layoutNodes(); });
@@ -82,14 +93,19 @@ const AgentNetwork = (() => {
           name: info.names[i],
           tribe,
           tribeColor: info.color,
+          abbr: info.abbr[i],
           x: 0, y: 0, tx: 0, ty: 0,
-          r: 16,
+          r: 18, tr: 18,
           dir: "NEUTRAL",
-          conv: 5,
+          prevDir: "NEUTRAL",
+          conv: 0,
+          targetConv: 0,
           glow: 0,
           ring: false,
           ringTime: 0,
-          initial: info.names[i].split(" ").map(w => w[0]).join(""),
+          flipFlash: 0,
+          breatheOffset: Math.random() * Math.PI * 2,
+          reasoning: "",
         });
       }
     }
@@ -99,10 +115,10 @@ const AgentNetwork = (() => {
   function _layoutNodes() {
     const cx = W / 2;
     const cy = H / 2;
-    const orbitR = Math.min(W, H) * 0.32;
-    const clusterR = Math.min(W, H) * 0.12;
+    const orbitR = Math.min(W, H) * 0.30;
+    const clusterR = Math.min(W, H) * 0.13;
 
-    // Compass positions: technical=top, macro=right, sentiment=bottom, strategists=left
+    // Diamond: technical=top, macro=right, sentiment=bottom, strategists=left
     const positions = {
       technical:   { angle: -Math.PI / 2 },
       macro:       { angle: 0 },
@@ -121,11 +137,26 @@ const AgentNetwork = (() => {
       node.tx = tribeCx + clusterR * Math.cos(a);
       node.ty = tribeCy + clusterR * Math.sin(a);
 
-      // Init position
       if (node.x === 0 && node.y === 0) {
         node.x = node.tx;
         node.y = node.ty;
       }
+    }
+  }
+
+  // ── Ambient Particles ──────────────────────────────────
+  function _initAmbientParticles() {
+    particles = [];
+    const count = Math.floor((W * H) / 8000);
+    for (let i = 0; i < count; i++) {
+      particles.push({
+        x: Math.random() * W,
+        y: Math.random() * H,
+        vx: (Math.random() - 0.5) * 0.15,
+        vy: (Math.random() - 0.5) * 0.15,
+        size: Math.random() * 1.2 + 0.3,
+        alpha: Math.random() * 0.15 + 0.03,
+      });
     }
   }
 
@@ -137,136 +168,350 @@ const AgentNetwork = (() => {
       if (!node) return;
       const oldDir = node.dir;
       node.dir = (d.direction || "NEUTRAL").toUpperCase();
-      node.conv = d.conviction || 5;
+      node.targetConv = d.conviction || 0;
       node.glow = 1.0;
+      node.reasoning = d.reasoning || "";
+
       if (d.changed_from && d.changed_from.toUpperCase() !== node.dir) {
         node.ring = true;
         node.ringTime = 0;
+        node.flipFlash = 1.0;
+        node.prevDir = d.changed_from.toUpperCase();
+      }
+
+      // Thought bubble
+      if (node.reasoning) {
+        _addThoughtBubble(node);
       }
     });
 
     document.addEventListener("state:full", (e) => {
-      const votes = e.detail.votes || {};
+      const state = e.detail;
+      const votes = state.votes || {};
       for (const [id, v] of Object.entries(votes)) {
         const node = nodes.find(n => n.id === id);
         if (!node) continue;
         node.dir = (v.direction || "NEUTRAL").toUpperCase();
-        node.conv = v.conviction || 5;
+        node.targetConv = v.conviction || 0;
       }
     });
 
     document.addEventListener("cycle:started", () => {
       for (const n of nodes) {
         n.dir = "NEUTRAL";
-        n.conv = 5;
+        n.targetConv = 0;
         n.glow = 0;
         n.ring = false;
+        n.flipFlash = 0;
+        n.reasoning = "";
       }
+      thoughtBubbles = [];
+      dataParticles = [];
+    });
+
+    document.addEventListener("round:completed", () => {
+      // Shockwave from center
+      shockwaves.push({ x: W / 2, y: H / 2, radius: 0, maxRadius: Math.max(W, H) * 0.6, alpha: 0.3 });
     });
   }
 
-  // ── Render Loop ─────────────────────────────────────────
-  function _loop() {
-    time += 0.016;
-    _update();
-    _draw();
-    animId = requestAnimationFrame(_loop);
+  // ── Thought Bubbles ─────────────────────────────────────
+  function _addThoughtBubble(node) {
+    const text = node.reasoning.length > 60 ? node.reasoning.slice(0, 57) + "..." : node.reasoning;
+    thoughtBubbles.push({
+      x: node.x,
+      y: node.y - node.r - 12,
+      text,
+      alpha: 1.0,
+      life: 3.0,  // seconds
+      offsetY: 0,
+    });
+    // Max 5 visible at once
+    if (thoughtBubbles.length > 5) thoughtBubbles.shift();
   }
 
-  function _update() {
-    for (const n of nodes) {
-      // Smooth move to target
-      n.x += (n.tx - n.x) * 0.08;
-      n.y += (n.ty - n.y) * 0.08;
+  // ── Render Loop ─────────────────────────────────────────
+  function _loop(now) {
+    now = now || performance.now();
+    const dt = Math.min((now - lastTime) / 1000, 0.05); // cap at 50ms
+    lastTime = now;
+    time += dt;
 
-      // Radius based on conviction (5 = default, 10 = max)
-      const targetR = 12 + (n.conv / 10) * 14;
-      n.r += (targetR - n.r) * 0.1;
+    _update(dt);
+    _draw();
+    requestAnimationFrame(_loop);
+  }
+
+  function _update(dt) {
+    for (const n of nodes) {
+      // Smooth move
+      n.x += (n.tx - n.x) * 0.06;
+      n.y += (n.ty - n.y) * 0.06;
+
+      // Smooth conviction
+      n.conv += (n.targetConv - n.conv) * 0.08;
+
+      // Target radius: 18-22 based on conviction
+      n.tr = 18 + (n.conv / 100) * 4;
+      n.r += (n.tr - n.r) * 0.08;
 
       // Glow decay
-      if (n.glow > 0) n.glow *= 0.97;
+      if (n.glow > 0) n.glow *= Math.pow(0.3, dt);
       if (n.glow < 0.01) n.glow = 0;
+
+      // Flip flash decay
+      if (n.flipFlash > 0) n.flipFlash *= Math.pow(0.15, dt);
+      if (n.flipFlash < 0.01) n.flipFlash = 0;
 
       // Ring animation
       if (n.ring) {
-        n.ringTime += 0.02;
+        n.ringTime += dt * 1.5;
         if (n.ringTime > 1) n.ring = false;
       }
     }
-  }
 
-  function _draw() {
-    ctx.clearRect(0, 0, W, H);
+    // Ambient particles
+    for (const p of particles) {
+      p.x += p.vx;
+      p.y += p.vy;
+      if (p.x < 0) p.x = W;
+      if (p.x > W) p.x = 0;
+      if (p.y < 0) p.y = H;
+      if (p.y > H) p.y = 0;
+    }
 
-    // Background grid dots
-    _drawGrid();
+    // Data particles along connections
+    _updateDataParticles(dt);
 
-    // Connection lines between agreeing agents
-    _drawConnections();
+    // Thought bubbles
+    for (let i = thoughtBubbles.length - 1; i >= 0; i--) {
+      const tb = thoughtBubbles[i];
+      tb.life -= dt;
+      tb.alpha = Math.max(0, tb.life / 1.5);  // Fade out in last 1.5s
+      tb.offsetY -= dt * 10;
+      if (tb.life <= 0) thoughtBubbles.splice(i, 1);
+    }
 
-    // Tribe labels
-    _drawTribeLabels();
+    // Shockwaves
+    for (let i = shockwaves.length - 1; i >= 0; i--) {
+      const sw = shockwaves[i];
+      sw.radius += dt * 350;
+      sw.alpha *= Math.pow(0.2, dt);
+      if (sw.alpha < 0.005 || sw.radius > sw.maxRadius) shockwaves.splice(i, 1);
+    }
 
-    // Nodes
-    for (const n of nodes) {
-      _drawNode(n);
+    // Periodically spawn data particles
+    if (Math.random() < dt * 3) {
+      _spawnDataParticle();
     }
   }
 
-  function _drawGrid() {
-    ctx.fillStyle = "rgba(30,30,46,0.3)";
-    const step = 40;
+  function _spawnDataParticle() {
+    // Find two connected nodes (same tribe, same direction, or cross-tribe high conviction)
+    const votedNodes = nodes.filter(n => n.dir !== "NEUTRAL" && n.conv > 20);
+    if (votedNodes.length < 2) return;
+
+    const a = votedNodes[Math.floor(Math.random() * votedNodes.length)];
+    // Find a partner
+    let candidates;
+    if (Math.random() < 0.7) {
+      // Same tribe
+      candidates = votedNodes.filter(n => n !== a && n.tribe === a.tribe && n.dir === a.dir);
+    } else {
+      // Cross-tribe, same direction, high conviction
+      candidates = votedNodes.filter(n => n !== a && n.tribe !== a.tribe && n.dir === a.dir && n.conv > 70);
+    }
+    if (candidates.length === 0) return;
+
+    const b = candidates[Math.floor(Math.random() * candidates.length)];
+    // Flow from higher conviction to lower
+    const from = a.conv >= b.conv ? a : b;
+    const to = a.conv >= b.conv ? b : a;
+    const col = DIR_COLORS[from.dir] || "#37474f";
+
+    dataParticles.push({
+      fromX: from.x, fromY: from.y,
+      toX: to.x, toY: to.y,
+      progress: 0,
+      speed: 0.4 + Math.random() * 0.4,
+      color: col,
+      size: 1.5 + Math.random(),
+    });
+  }
+
+  function _updateDataParticles(dt) {
+    for (let i = dataParticles.length - 1; i >= 0; i--) {
+      const dp = dataParticles[i];
+      dp.progress += dt * dp.speed;
+      if (dp.progress >= 1) dataParticles.splice(i, 1);
+    }
+    // Limit
+    if (dataParticles.length > 60) dataParticles.splice(0, dataParticles.length - 60);
+  }
+
+  // ── Draw ────────────────────────────────────────────────
+  function _draw() {
+    ctx.clearRect(0, 0, W, H);
+
+    _drawDotGrid();
+    _drawAmbientParticles();
+    _drawShockwaves();
+    _drawConnections();
+    _drawDataParticles();
+    _drawTribeLabels();
+
+    for (const n of nodes) {
+      _drawNode(n);
+    }
+
+    _drawThoughtBubbles();
+
+    // Network stat
+    const voted = nodes.filter(n => n.dir !== "NEUTRAL").length;
+    const statEl = document.getElementById("network-stat");
+    if (statEl) statEl.textContent = voted + "/24 active";
+  }
+
+  function _drawDotGrid() {
+    ctx.fillStyle = "rgba(20, 20, 40, 0.25)";
+    const step = 35;
     for (let x = step; x < W; x += step) {
       for (let y = step; y < H; y += step) {
         ctx.beginPath();
-        ctx.arc(x, y, 0.8, 0, Math.PI * 2);
+        ctx.arc(x, y, 0.6, 0, Math.PI * 2);
         ctx.fill();
       }
     }
   }
 
+  function _drawAmbientParticles() {
+    for (const p of particles) {
+      ctx.globalAlpha = p.alpha;
+      ctx.fillStyle = "#40c4ff";
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    ctx.globalAlpha = 1;
+  }
+
+  function _drawShockwaves() {
+    for (const sw of shockwaves) {
+      ctx.beginPath();
+      ctx.arc(sw.x, sw.y, sw.radius, 0, Math.PI * 2);
+      ctx.strokeStyle = _hex2rgba("#40c4ff", sw.alpha);
+      ctx.lineWidth = 2;
+      ctx.stroke();
+
+      // Inner glow
+      const grad = ctx.createRadialGradient(sw.x, sw.y, sw.radius * 0.95, sw.x, sw.y, sw.radius);
+      grad.addColorStop(0, "rgba(64,196,255,0)");
+      grad.addColorStop(1, _hex2rgba("#40c4ff", sw.alpha * 0.3));
+      ctx.fillStyle = grad;
+      ctx.fill();
+    }
+  }
+
   function _drawConnections() {
-    // Only draw connections within same tribe that agree on direction
+    ctx.save();
+
+    // Intra-tribe connections (ALL pairs within a tribe)
     for (const [tribe, info] of Object.entries(TRIBES)) {
       const tribeNodes = nodes.filter(n => n.tribe === tribe);
       for (let i = 0; i < tribeNodes.length; i++) {
         for (let j = i + 1; j < tribeNodes.length; j++) {
           const a = tribeNodes[i], b = tribeNodes[j];
-          if (a.dir === b.dir && a.dir !== "NEUTRAL") {
-            const col = DIR_COLORS[a.dir] || "#78909c";
-            const alpha = 0.08 + Math.min(a.conv, b.conv) / 10 * 0.12;
-            ctx.strokeStyle = _hex2rgba(col, alpha);
-            ctx.lineWidth = 1;
+          const bothVoted = a.dir !== "NEUTRAL" && b.dir !== "NEUTRAL";
+          const agree = a.dir === b.dir;
+
+          if (!bothVoted && a.dir === "NEUTRAL" && b.dir === "NEUTRAL") {
+            // Both neutral: very faint line
+            ctx.strokeStyle = "rgba(40, 40, 60, 0.12)";
+            ctx.lineWidth = 0.5;
+            ctx.setLineDash([]);
+            ctx.shadowBlur = 0;
             ctx.beginPath();
             ctx.moveTo(a.x, a.y);
             ctx.lineTo(b.x, b.y);
             ctx.stroke();
+            continue;
           }
+
+          if (agree && bothVoted) {
+            // Both same direction: glowing colored line
+            const col = DIR_COLORS[a.dir];
+            const avgConv = (a.conv + b.conv) / 200;
+            ctx.strokeStyle = _hex2rgba(col, 0.15 + avgConv * 0.35);
+            ctx.lineWidth = 1 + avgConv * 1.5;
+            ctx.setLineDash([]);
+            ctx.shadowBlur = 8 + avgConv * 12;
+            ctx.shadowColor = col;
+          } else if (bothVoted && !agree) {
+            // Disagree: dim gray dashed
+            ctx.strokeStyle = "rgba(60, 60, 80, 0.15)";
+            ctx.lineWidth = 0.5;
+            ctx.setLineDash([4, 6]);
+            ctx.shadowBlur = 0;
+          } else {
+            // One voted, one neutral
+            ctx.strokeStyle = "rgba(40, 40, 60, 0.1)";
+            ctx.lineWidth = 0.5;
+            ctx.setLineDash([]);
+            ctx.shadowBlur = 0;
+          }
+
+          ctx.beginPath();
+          ctx.moveTo(a.x, a.y);
+          ctx.lineTo(b.x, b.y);
+          ctx.stroke();
         }
       }
     }
 
-    // Cross-tribe connections for strong agreement (conviction >= 7)
-    const strong = nodes.filter(n => n.conv >= 7 && n.dir !== "NEUTRAL");
+    // Cross-tribe connections: same direction, conviction > 70
+    ctx.setLineDash([]);
+    const strong = nodes.filter(n => n.conv > 70 && n.dir !== "NEUTRAL");
     for (let i = 0; i < strong.length; i++) {
       for (let j = i + 1; j < strong.length; j++) {
         if (strong[i].tribe === strong[j].tribe) continue;
         if (strong[i].dir !== strong[j].dir) continue;
         const col = DIR_COLORS[strong[i].dir];
-        ctx.strokeStyle = _hex2rgba(col, 0.04);
-        ctx.lineWidth = 0.5;
+        const avgConv = (strong[i].conv + strong[j].conv) / 200;
+        ctx.strokeStyle = _hex2rgba(col, 0.05 + avgConv * 0.1);
+        ctx.lineWidth = 0.6;
+        ctx.shadowBlur = 4;
+        ctx.shadowColor = col;
         ctx.beginPath();
         ctx.moveTo(strong[i].x, strong[i].y);
         ctx.lineTo(strong[j].x, strong[j].y);
         ctx.stroke();
       }
     }
+
+    ctx.restore();
+  }
+
+  function _drawDataParticles() {
+    for (const dp of dataParticles) {
+      const x = dp.fromX + (dp.toX - dp.fromX) * dp.progress;
+      const y = dp.fromY + (dp.toY - dp.fromY) * dp.progress;
+      const alpha = Math.sin(dp.progress * Math.PI); // Fade in/out
+
+      ctx.save();
+      ctx.shadowBlur = 6;
+      ctx.shadowColor = dp.color;
+      ctx.fillStyle = _hex2rgba(dp.color, alpha * 0.8);
+      ctx.beginPath();
+      ctx.arc(x, y, dp.size, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.restore();
+    }
   }
 
   function _drawTribeLabels() {
     const cx = W / 2;
     const cy = H / 2;
-    const orbitR = Math.min(W, H) * 0.32;
+    const orbitR = Math.min(W, H) * 0.30;
     const positions = {
       technical:   -Math.PI / 2,
       macro:       0,
@@ -276,50 +521,103 @@ const AgentNetwork = (() => {
 
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";
-    ctx.font = "600 9px " + getComputedStyle(document.body).fontFamily;
+    ctx.font = "600 9px 'JetBrains Mono', monospace";
 
     for (const [tribe, info] of Object.entries(TRIBES)) {
       const a = positions[tribe];
       const lx = cx + orbitR * Math.cos(a);
       const ly = cy + orbitR * Math.sin(a);
-      ctx.fillStyle = _hex2rgba(info.color, 0.35);
+      ctx.fillStyle = _hex2rgba(info.color, 0.2);
       ctx.fillText(info.label, lx, ly);
     }
   }
 
   function _drawNode(n) {
-    const col = DIR_COLORS[n.dir] || "#78909c";
+    const col = DIR_COLORS[n.dir] || "#37474f";
 
-    // Glow / pulse
-    if (n.glow > 0.05) {
-      const gr = ctx.createRadialGradient(n.x, n.y, n.r, n.x, n.y, n.r * 2.5);
-      gr.addColorStop(0, _hex2rgba(col, n.glow * 0.4));
+    // Breathing animation
+    const breathe = Math.sin(time * 1.2 + n.breatheOffset) * 1.2;
+    const drawR = n.r + breathe;
+
+    // Conviction halo (radial gradient glow)
+    if (n.conv > 10) {
+      const haloR = drawR * (1.8 + (n.conv / 100) * 1.5);
+      const haloAlpha = 0.05 + (n.conv / 100) * 0.15;
+      const gr = ctx.createRadialGradient(n.x, n.y, drawR * 0.8, n.x, n.y, haloR);
+      gr.addColorStop(0, _hex2rgba(col, haloAlpha));
       gr.addColorStop(1, _hex2rgba(col, 0));
       ctx.fillStyle = gr;
       ctx.beginPath();
-      ctx.arc(n.x, n.y, n.r * 2.5, 0, Math.PI * 2);
+      ctx.arc(n.x, n.y, haloR, 0, Math.PI * 2);
       ctx.fill();
+    }
+
+    // Vote glow pulse
+    if (n.glow > 0.05) {
+      ctx.save();
+      ctx.shadowBlur = 25 * n.glow;
+      ctx.shadowColor = col;
+      const gr = ctx.createRadialGradient(n.x, n.y, drawR, n.x, n.y, drawR * 3);
+      gr.addColorStop(0, _hex2rgba(col, n.glow * 0.5));
+      gr.addColorStop(1, _hex2rgba(col, 0));
+      ctx.fillStyle = gr;
+      ctx.beginPath();
+      ctx.arc(n.x, n.y, drawR * 3, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.restore();
+    }
+
+    // Flip flash
+    if (n.flipFlash > 0.05) {
+      ctx.save();
+      ctx.globalAlpha = n.flipFlash;
+      ctx.fillStyle = "#ffffff";
+      ctx.shadowBlur = 30;
+      ctx.shadowColor = "#ffffff";
+      ctx.beginPath();
+      ctx.arc(n.x, n.y, drawR * 1.5, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.restore();
     }
 
     // Ring animation (direction flip)
     if (n.ring) {
-      const rr = n.r + n.ringTime * 30;
-      const alpha = 1 - n.ringTime;
-      ctx.strokeStyle = _hex2rgba(col, alpha * 0.6);
-      ctx.lineWidth = 2;
+      const rr = drawR + n.ringTime * 40;
+      const alpha = (1 - n.ringTime) * 0.7;
+      ctx.strokeStyle = _hex2rgba(col, alpha);
+      ctx.lineWidth = 2.5 * (1 - n.ringTime);
       ctx.beginPath();
       ctx.arc(n.x, n.y, rr, 0, Math.PI * 2);
       ctx.stroke();
+
+      // Second ring, delayed
+      if (n.ringTime > 0.2) {
+        const rr2 = drawR + (n.ringTime - 0.2) * 40;
+        const alpha2 = (1 - n.ringTime) * 0.4;
+        ctx.strokeStyle = _hex2rgba(col, alpha2);
+        ctx.lineWidth = 1.5 * (1 - n.ringTime);
+        ctx.beginPath();
+        ctx.arc(n.x, n.y, rr2, 0, Math.PI * 2);
+        ctx.stroke();
+      }
     }
 
-    // Idle breathing
-    const breathe = Math.sin(time * 1.5 + nodes.indexOf(n) * 0.5) * 1.5;
-    const drawR = n.r + breathe;
+    // Main circle
+    const grad = ctx.createRadialGradient(
+      n.x - drawR * 0.25, n.y - drawR * 0.25, 0,
+      n.x, n.y, drawR
+    );
+    if (n.dir === "NEUTRAL") {
+      grad.addColorStop(0, "rgba(55, 71, 79, 0.35)");
+      grad.addColorStop(1, "rgba(55, 71, 79, 0.1)");
+    } else {
+      grad.addColorStop(0, _hex2rgba(col, 0.45));
+      grad.addColorStop(1, _hex2rgba(col, 0.15));
+    }
 
-    // Main circle - gradient
-    const grad = ctx.createRadialGradient(n.x - drawR * 0.3, n.y - drawR * 0.3, 0, n.x, n.y, drawR);
-    grad.addColorStop(0, _hex2rgba(col, 0.35));
-    grad.addColorStop(1, _hex2rgba(col, 0.12));
+    ctx.save();
+    ctx.shadowBlur = n.dir !== "NEUTRAL" ? 8 : 0;
+    ctx.shadowColor = col;
     ctx.fillStyle = grad;
     ctx.beginPath();
     ctx.arc(n.x, n.y, drawR, 0, Math.PI * 2);
@@ -327,26 +625,64 @@ const AgentNetwork = (() => {
 
     // Border
     ctx.strokeStyle = _hex2rgba(col, 0.5 + n.glow * 0.5);
-    ctx.lineWidth = 1.5;
+    ctx.lineWidth = n.dir !== "NEUTRAL" ? 1.5 : 1;
     ctx.stroke();
+    ctx.restore();
 
-    // Initial text
-    ctx.fillStyle = _hex2rgba(col, 0.85);
+    // Abbreviation text
+    ctx.fillStyle = _hex2rgba(col, n.dir === "NEUTRAL" ? 0.5 : 0.9);
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";
-    const fontSize = Math.max(8, drawR * 0.7);
-    ctx.font = `700 ${fontSize}px ${getComputedStyle(document.body).getPropertyValue('--font-mono') || 'monospace'}`;
-    ctx.fillText(n.initial, n.x, n.y);
+    const fontSize = Math.max(9, drawR * 0.65);
+    ctx.font = `700 ${fontSize}px 'JetBrains Mono', monospace`;
+    ctx.fillText(n.abbr, n.x, n.y);
 
-    // Conviction indicator - small bar under node
-    const barW = drawR * 1.4;
-    const barH = 2.5;
-    const barX = n.x - barW / 2;
-    const barY = n.y + drawR + 5;
-    ctx.fillStyle = "rgba(30,30,46,0.6)";
-    ctx.fillRect(barX, barY, barW, barH);
-    ctx.fillStyle = _hex2rgba(col, 0.6);
-    ctx.fillRect(barX, barY, barW * (n.conv / 10), barH);
+    // Conviction bar under node
+    if (n.conv > 5) {
+      const barW = drawR * 1.6;
+      const barH = 2;
+      const barX = n.x - barW / 2;
+      const barY = n.y + drawR + 5;
+      ctx.fillStyle = "rgba(255,255,255,0.04)";
+      _roundRect(ctx, barX, barY, barW, barH, 1);
+      ctx.fill();
+      ctx.fillStyle = _hex2rgba(col, 0.6);
+      _roundRect(ctx, barX, barY, barW * (n.conv / 100), barH, 1);
+      ctx.fill();
+    }
+  }
+
+  function _drawThoughtBubbles() {
+    ctx.font = "10px 'JetBrains Mono', monospace";
+    ctx.textAlign = "left";
+    ctx.textBaseline = "bottom";
+
+    for (const tb of thoughtBubbles) {
+      const alpha = Math.min(1, tb.alpha);
+      if (alpha <= 0) continue;
+
+      const y = tb.y + tb.offsetY;
+      const text = '"' + tb.text + '"';
+      const metrics = ctx.measureText(text);
+      const pad = 6;
+      const w = metrics.width + pad * 2;
+      const h = 16;
+      const bx = tb.x - w / 2;
+      const by = y - h;
+
+      // Background
+      ctx.fillStyle = _hex2rgba("#0a0a1a", alpha * 0.85);
+      _roundRect(ctx, bx, by, w, h, 4);
+      ctx.fill();
+      ctx.strokeStyle = _hex2rgba("#40c4ff", alpha * 0.2);
+      ctx.lineWidth = 0.5;
+      _roundRect(ctx, bx, by, w, h, 4);
+      ctx.stroke();
+
+      // Text
+      ctx.fillStyle = _hex2rgba("#c0c0d0", alpha * 0.8);
+      ctx.fillText(text, bx + pad, by + h - 3);
+    }
   }
 
   // ── Utils ───────────────────────────────────────────────
@@ -357,10 +693,29 @@ const AgentNetwork = (() => {
     return `rgba(${r},${g},${b},${alpha})`;
   }
 
+  function _roundRect(ctx, x, y, w, h, r) {
+    ctx.beginPath();
+    ctx.moveTo(x + r, y);
+    ctx.lineTo(x + w - r, y);
+    ctx.quadraticCurveTo(x + w, y, x + w, y + r);
+    ctx.lineTo(x + w, y + h - r);
+    ctx.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
+    ctx.lineTo(x + r, y + h);
+    ctx.quadraticCurveTo(x, y + h, x, y + h - r);
+    ctx.lineTo(x, y + r);
+    ctx.quadraticCurveTo(x, y, x + r, y);
+    ctx.closePath();
+  }
+
   // ── Public ──────────────────────────────────────────────
   return { init };
 })();
 
+// Also expose as initAgentNetwork for external callers
+function initAgentNetwork(canvasId) {
+  AgentNetwork.init(canvasId);
+}
+
 document.addEventListener("DOMContentLoaded", () => {
-  AgentNetwork.init();
+  AgentNetwork.init("agent-canvas");
 });

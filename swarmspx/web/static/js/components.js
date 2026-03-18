@@ -1,7 +1,7 @@
 /* ============================================================
    SwarmSPX — UI Components
-   Trade Card, Consensus Gauge, Round Timeline, Market Bar,
-   Alert Badges, Activity Log
+   Market Bar, Trade Card, Consensus Gauge, Round Timeline,
+   Debate Room, Alert Badges, Activity Log
    ============================================================ */
 
 "use strict";
@@ -9,6 +9,8 @@
 // ── Market Bar ──────────────────────────────────────────────
 
 const MarketBar = {
+  _lastPrice: null,
+
   init() {
     document.addEventListener("market:update", (e) => this.render(e.detail));
     document.addEventListener("state:full", (e) => {
@@ -30,9 +32,19 @@ const MarketBar = {
     const vixEl = document.getElementById("vix-level");
     const regimeEl = document.getElementById("regime-badge");
     const vwapEl = document.getElementById("vwap-distance");
+    const vixFill = document.getElementById("vix-thermo-fill");
 
     if (spxEl) {
       const price = parseFloat(ctx.spx_price) || 0;
+      // Flash on price change
+      if (this._lastPrice !== null && price !== this._lastPrice) {
+        const flashClass = price > this._lastPrice ? "price-flash-up" : "price-flash-down";
+        spxEl.classList.remove("price-flash-up", "price-flash-down");
+        void spxEl.offsetWidth; // Force reflow
+        spxEl.classList.add(flashClass);
+        setTimeout(() => spxEl.classList.remove(flashClass), 500);
+      }
+      this._lastPrice = price;
       spxEl.textContent = price.toFixed(2);
     }
 
@@ -46,10 +58,17 @@ const MarketBar = {
       const vix = parseFloat(ctx.vix_level) || 0;
       vixEl.textContent = vix.toFixed(2);
       vixEl.className = "ticker-value mono " + (vix > 25 ? "bear" : vix > 18 ? "accent" : "bull");
+
+      // VIX thermometer: 10-40 range mapped to 0-100%
+      if (vixFill) {
+        const pct = Math.max(0, Math.min(100, ((vix - 10) / 30) * 100));
+        vixFill.style.width = pct + "%";
+        vixFill.style.background = vix > 25 ? "var(--bear)" : vix > 18 ? "var(--warn)" : "var(--bull)";
+      }
     }
 
     if (regimeEl && ctx.market_regime) {
-      const r = ctx.market_regime.toLowerCase().replace(/\s+/g, "-");
+      const r = ctx.market_regime.toLowerCase().replace(/[\s_]+/g, "-");
       regimeEl.textContent = ctx.market_regime;
       regimeEl.className = "regime-badge " + r;
     }
@@ -82,7 +101,17 @@ const TradeCard = {
 
   clear() {
     const el = document.getElementById("trade-card");
-    if (el) el.classList.remove("visible");
+    if (!el) return;
+    el.className = "card";
+    el.innerHTML = `
+      <div class="card-header">
+        <span class="card-header-icon">&#9889;</span> Trade Signal
+      </div>
+      <div class="tc-waiting">
+        <div class="tc-scan-text">SCANNING...</div>
+        <div class="tc-scan-bar"></div>
+      </div>
+    `;
   },
 
   render(tc) {
@@ -94,45 +123,62 @@ const TradeCard = {
     const actionClass = action === "BUY" || action === "BULL" ? "buy"
                       : action === "SELL" || action === "BEAR" ? "sell" : "wait";
     const dir = tc.direction ? tc.direction.toUpperCase() : "";
+    const isBull = dir === "BULL" || action === "BUY";
+    const isBear = dir === "BEAR" || action === "SELL";
+
+    const arrow = isBull ? "&#9650;" : isBear ? "&#9660;" : "&#9654;";
+    const arrowClass = isBull ? "bull" : isBear ? "bear" : "neut";
+    const borderClass = isBull ? "tc-border-bull" : isBear ? "tc-border-bear" : "";
+
+    el.className = "card " + borderClass;
 
     el.innerHTML = `
-      <div style="display:flex;align-items:center;gap:12px;margin-bottom:4px;">
-        <span class="tc-action ${actionClass}">${action}</span>
-        ${dir && dir !== action ? `<span class="mono dim" style="font-size:.85rem">${dir}</span>` : ""}
+      <div class="card-header">
+        <span class="card-header-icon">&#9889;</span> Trade Signal
       </div>
-      <div class="tc-instrument">${tc.instrument || "SPX 0DTE"}</div>
-      <div class="tc-prices">
-        <div class="tc-price-item">
-          <span class="tc-price-label">Entry</span>
-          <span class="tc-price-val mono">${_fmtPrice(tc.entry_price_est)}</span>
+      <div class="tc-body tc-materialize">
+        <div style="display:flex;align-items:center;gap:14px;margin-bottom:6px;">
+          <span class="tc-direction-arrow ${arrowClass}">${arrow}</span>
+          <div>
+            <span class="tc-action ${actionClass}">${_esc(action)}</span>
+            ${dir && dir !== action ? `<span class="mono dim" style="font-size:.8rem;margin-left:8px;">${_esc(dir)}</span>` : ""}
+          </div>
         </div>
-        <div class="tc-price-item">
-          <span class="tc-price-label">Target</span>
-          <span class="tc-price-val mono bull">${_fmtPrice(tc.target_price)}</span>
+        <div class="tc-instrument">${_esc(tc.instrument || "SPX 0DTE")}</div>
+        <div class="tc-price-ladder">
+          <div class="tc-price-level target">
+            <span class="tc-price-tag bull">TARGET</span>
+            <span class="tc-price-val mono bull">${_fmtPrice(tc.target_price)}</span>
+          </div>
+          <div class="tc-price-level entry">
+            <span class="tc-price-tag accent">ENTRY</span>
+            <span class="tc-price-val mono accent">${_fmtPrice(tc.entry_price_est)}</span>
+          </div>
+          <div class="tc-price-level stop">
+            <span class="tc-price-tag bear">STOP</span>
+            <span class="tc-price-val mono bear">${_fmtPrice(tc.stop_price)}</span>
+          </div>
         </div>
-        <div class="tc-price-item">
-          <span class="tc-price-label">Stop</span>
-          <span class="tc-price-val mono bear">${_fmtPrice(tc.stop_price)}</span>
+        <div class="tc-rationale">${_esc(tc.rationale || "")}</div>
+        ${tc.key_risk ? `<div class="tc-risk">${_esc(tc.key_risk)}</div>` : ""}
+        <div class="tc-meta">
+          ${tc.time_window ? `<span>&#9202; ${_esc(tc.time_window)}</span>` : ""}
+          ${tc.market_regime ? `<span>&#9881; ${_esc(tc.market_regime)}</span>` : ""}
+          ${tc.confidence != null ? `<span>&#9733; ${tc.confidence}% conf</span>` : ""}
+          ${tc.agreement_pct != null ? `<span>&#9745; ${tc.agreement_pct}% agree</span>` : ""}
         </div>
-      </div>
-      <div class="tc-rationale">${_esc(tc.rationale || "")}</div>
-      ${tc.key_risk ? `<div class="tc-risk">Risk: ${_esc(tc.key_risk)}</div>` : ""}
-      <div class="tc-meta">
-        ${tc.time_window ? `<span>&#9202; ${_esc(tc.time_window)}</span>` : ""}
-        ${tc.market_regime ? `<span>&#9881; ${_esc(tc.market_regime)}</span>` : ""}
-        ${tc.confidence != null ? `<span>&#9733; ${tc.confidence}% conf</span>` : ""}
-        ${tc.agreement_pct != null ? `<span>&#9745; ${tc.agreement_pct}% agree</span>` : ""}
       </div>
     `;
-    // Trigger slide-in
-    el.classList.remove("visible");
-    requestAnimationFrame(() => requestAnimationFrame(() => el.classList.add("visible")));
   },
 };
 
 // ── Consensus Gauge ─────────────────────────────────────────
 
 const ConsensusGauge = {
+  _animTarget: 0,
+  _animCurrent: 0,
+  _animating: false,
+
   init() {
     document.addEventListener("consensus:reached", (e) => this.render(e.detail));
     document.addEventListener("state:full", (e) => {
@@ -146,14 +192,19 @@ const ConsensusGauge = {
       this._renderVoteBar(e.detail.vote_counts);
     });
     document.addEventListener("cycle:started", () => this._reset());
+
+    // Initial draw
+    this._drawArc(0, "NEUTRAL");
   },
 
   _reset() {
-    const wrap = document.getElementById("consensus-wrap");
-    if (!wrap) return;
-    wrap.querySelector(".gauge-value").textContent = "--";
-    wrap.querySelector(".gauge-sub").textContent = "";
-    this._drawArc(0);
+    const valEl = document.getElementById("gauge-value");
+    const subEl = document.getElementById("gauge-sub");
+    if (valEl) { valEl.textContent = "--"; valEl.className = "gauge-value mono"; }
+    if (subEl) subEl.textContent = "";
+    this._animTarget = 0;
+    this._animCurrent = 0;
+    this._drawArc(0, "NEUTRAL");
     this._renderVoteBar({});
   },
 
@@ -163,8 +214,8 @@ const ConsensusGauge = {
     const agree = c.agreement_pct != null ? parseFloat(c.agreement_pct) : null;
     const dir = (c.direction || "").toUpperCase();
 
-    const valEl = document.querySelector("#consensus-wrap .gauge-value");
-    const subEl = document.querySelector("#consensus-wrap .gauge-sub");
+    const valEl = document.getElementById("gauge-value");
+    const subEl = document.getElementById("gauge-sub");
 
     if (valEl) {
       valEl.textContent = conf.toFixed(0) + "%";
@@ -175,19 +226,36 @@ const ConsensusGauge = {
                           (dir ? "  " + dir : "");
     }
 
-    this._drawArc(conf);
+    // Animated arc sweep
+    this._animTarget = conf;
+    if (!this._animating) this._animateArc(dir);
 
     if (c.vote_counts) this._renderVoteBar(c.vote_counts);
-
-    // Alerts
     this._renderAlerts(c);
   },
 
-  _drawArc(pct) {
-    const svg = document.querySelector("#consensus-wrap .gauge-svg");
+  _animateArc(dir) {
+    this._animating = true;
+    const step = () => {
+      const diff = this._animTarget - this._animCurrent;
+      if (Math.abs(diff) < 0.5) {
+        this._animCurrent = this._animTarget;
+        this._drawArc(this._animCurrent, dir);
+        this._animating = false;
+        return;
+      }
+      this._animCurrent += diff * 0.06;
+      this._drawArc(this._animCurrent, dir);
+      requestAnimationFrame(step);
+    };
+    step();
+  },
+
+  _drawArc(pct, dir) {
+    const svg = document.getElementById("gauge-svg");
     if (!svg) return;
 
-    const cx = 110, cy = 105, r = 85;
+    const cx = 110, cy = 110, r = 85;
     const startAngle = Math.PI;
     const endAngle = startAngle + (Math.PI * Math.min(pct, 100) / 100);
 
@@ -197,22 +265,59 @@ const ConsensusGauge = {
     const y2 = cy + r * Math.sin(endAngle);
     const large = pct > 50 ? 1 : 0;
 
-    const color = pct >= 80 ? "var(--bull)" : pct >= 60 ? "#66bb6a" : pct >= 40 ? "var(--warn)" : "var(--bear)";
+    // Color based on confidence level
+    let color, glowColor;
+    if (pct >= 80) {
+      color = "var(--bull)"; glowColor = "rgba(0,230,118,0.4)";
+    } else if (pct >= 60) {
+      color = "#66bb6a"; glowColor = "rgba(102,187,106,0.3)";
+    } else if (pct >= 40) {
+      color = "var(--warn)"; glowColor = "rgba(255,214,0,0.3)";
+    } else {
+      color = "var(--bear)"; glowColor = "rgba(255,23,68,0.3)";
+    }
+
+    // Needle angle
+    const needleAngle = startAngle + (Math.PI * Math.min(pct, 100) / 100);
+    const needleLen = r - 15;
+    const nx = cx + needleLen * Math.cos(needleAngle);
+    const ny = cy + needleLen * Math.sin(needleAngle);
 
     svg.innerHTML = `
+      <defs>
+        <filter id="gauge-glow">
+          <feGaussianBlur in="SourceGraphic" stdDeviation="3" />
+        </filter>
+      </defs>
+      <!-- Background arc -->
       <path d="M ${cx - r} ${cy} A ${r} ${r} 0 1 1 ${cx + r} ${cy}"
-            fill="none" stroke="var(--border)" stroke-width="10" stroke-linecap="round" />
+            fill="none" stroke="rgba(255,255,255,0.04)" stroke-width="10" stroke-linecap="round" />
+      <!-- Tick marks -->
+      ${_gaugeTickMarks(cx, cy, r)}
       ${pct > 0 ? `
+      <!-- Glow arc -->
       <path d="M ${x1.toFixed(1)} ${y1.toFixed(1)} A ${r} ${r} 0 ${large} 1 ${x2.toFixed(1)} ${y2.toFixed(1)}"
-            fill="none" stroke="${color}" stroke-width="10" stroke-linecap="round"
-            style="filter: drop-shadow(0 0 6px ${color})" />
+            fill="none" stroke="${color}" stroke-width="12" stroke-linecap="round"
+            filter="url(#gauge-glow)" opacity="0.5" />
+      <!-- Main arc -->
+      <path d="M ${x1.toFixed(1)} ${y1.toFixed(1)} A ${r} ${r} 0 ${large} 1 ${x2.toFixed(1)} ${y2.toFixed(1)}"
+            fill="none" stroke="${color}" stroke-width="8" stroke-linecap="round" />
+      <!-- Needle -->
+      <line x1="${cx}" y1="${cy}" x2="${nx.toFixed(1)}" y2="${ny.toFixed(1)}"
+            stroke="${color}" stroke-width="2" stroke-linecap="round" />
+      <!-- Needle tip glow -->
+      <circle cx="${nx.toFixed(1)}" cy="${ny.toFixed(1)}" r="4"
+              fill="${color}" filter="url(#gauge-glow)" />
+      <circle cx="${nx.toFixed(1)}" cy="${ny.toFixed(1)}" r="2" fill="${color}" />
       ` : ""}
+      <!-- Center dot -->
+      <circle cx="${cx}" cy="${cy}" r="3" fill="rgba(255,255,255,0.15)" />
     `;
   },
 
   _renderVoteBar(counts) {
-    const bar = document.querySelector("#consensus-wrap .vote-bar");
-    const legend = document.querySelector("#consensus-wrap .vote-bar-legend");
+    const bar = document.getElementById("vote-bar");
+    const legend = document.getElementById("vote-bar-legend");
     if (!bar) return;
 
     const bull = counts.BULL || counts.bull || 0;
@@ -249,6 +354,22 @@ const ConsensusGauge = {
   },
 };
 
+function _gaugeTickMarks(cx, cy, r) {
+  let marks = "";
+  for (let i = 0; i <= 10; i++) {
+    const angle = Math.PI + (Math.PI * i / 10);
+    const inner = r + 8;
+    const outer = r + (i % 5 === 0 ? 16 : 12);
+    const x1 = cx + inner * Math.cos(angle);
+    const y1 = cy + inner * Math.sin(angle);
+    const x2 = cx + outer * Math.cos(angle);
+    const y2 = cy + outer * Math.sin(angle);
+    marks += `<line x1="${x1.toFixed(1)}" y1="${y1.toFixed(1)}" x2="${x2.toFixed(1)}" y2="${y2.toFixed(1)}"
+                stroke="rgba(255,255,255,${i % 5 === 0 ? 0.12 : 0.06})" stroke-width="${i % 5 === 0 ? 1.5 : 0.8}" />`;
+  }
+  return marks;
+}
+
 // ── Round Timeline ──────────────────────────────────────────
 
 const RoundTimeline = {
@@ -260,12 +381,17 @@ const RoundTimeline = {
   },
 
   _render() {
-    const wrap = document.querySelector("#round-timeline .tl-rounds");
+    const wrap = document.getElementById("tl-rounds");
     if (!wrap) return;
 
     const total = SwarmState.total_rounds || 5;
     const current = SwarmState.current_round || 0;
     const summaries = SwarmState.round_summaries || [];
+
+    if (summaries.length === 0 && current === 0) {
+      wrap.innerHTML = '<div class="dim mono" style="font-size:.8rem;text-align:center;padding:20px 0;">No rounds yet</div>';
+      return;
+    }
 
     let html = "";
     for (let i = 1; i <= total; i++) {
@@ -273,42 +399,156 @@ const RoundTimeline = {
       const isActive = i === current && SwarmState.status === "deliberating";
       const isDone = !!summary;
 
-      let miniBar = "";
+      let pieCanvas = "";
       let dirArrow = "";
+      let checkMark = "";
 
       if (isDone && summary.vote_counts) {
         const vc = summary.vote_counts;
         const bull = vc.BULL || vc.bull || 0;
         const bear = vc.BEAR || vc.bear || 0;
         const neut = vc.NEUTRAL || vc.neutral || 0;
-        const t = bull + bear + neut || 1;
-        miniBar = `
-          <div class="seg-bull" style="width:${(bull/t*100).toFixed(1)}%"></div>
-          <div class="seg-bear" style="width:${(bear/t*100).toFixed(1)}%"></div>
-          <div class="seg-neut" style="width:${(neut/t*100).toFixed(1)}%"></div>
-        `;
+
+        // We'll draw the pie chart after DOM update
+        pieCanvas = `<div class="tl-mini-pie"><canvas data-bull="${bull}" data-bear="${bear}" data-neut="${neut}" width="56" height="56"></canvas></div>`;
+
         const dominant = bull >= bear && bull >= neut ? "bull"
                        : bear >= bull && bear >= neut ? "bear" : "neut";
         const arrow = dominant === "bull" ? "&#9650;" : dominant === "bear" ? "&#9660;" : "&#9654;";
         dirArrow = `<span class="tl-direction ${dominant}">${arrow}</span>`;
+        checkMark = "";
+      } else if (isActive) {
+        pieCanvas = `<div class="tl-mini-pie" style="border:1px solid var(--accent);border-radius:50%;"></div>`;
+      } else {
+        pieCanvas = `<div class="tl-mini-pie"></div>`;
       }
 
       html += `
-        <div class="tl-round ${isActive ? 'active' : ''}">
+        <div class="tl-round ${isActive ? 'active' : ''} ${isDone ? 'done' : ''}">
           <span class="tl-round-num">R${i}</span>
-          <div class="tl-mini-bar">${miniBar}</div>
+          ${pieCanvas}
           ${dirArrow}
         </div>
       `;
     }
     wrap.innerHTML = html;
+
+    // Draw mini pie charts
+    wrap.querySelectorAll(".tl-mini-pie canvas").forEach(c => {
+      const bull = parseInt(c.dataset.bull) || 0;
+      const bear = parseInt(c.dataset.bear) || 0;
+      const neut = parseInt(c.dataset.neut) || 0;
+      _drawMiniPie(c, bull, bear, neut);
+    });
+  },
+};
+
+function _drawMiniPie(canvas, bull, bear, neut) {
+  const ctx = canvas.getContext("2d");
+  const total = bull + bear + neut || 1;
+  const cx = 28, cy = 28, r = 12;
+  const slices = [
+    { val: bull, color: "#00e676" },
+    { val: bear, color: "#ff1744" },
+    { val: neut, color: "#546e7a" },
+  ];
+
+  let angle = -Math.PI / 2;
+  for (const s of slices) {
+    if (s.val === 0) continue;
+    const sliceAngle = (s.val / total) * Math.PI * 2;
+    ctx.beginPath();
+    ctx.moveTo(cx, cy);
+    ctx.arc(cx, cy, r, angle, angle + sliceAngle);
+    ctx.closePath();
+    ctx.fillStyle = s.color;
+    ctx.fill();
+    angle += sliceAngle;
+  }
+}
+
+// ── Debate Room ─────────────────────────────────────────────
+
+const DebateRoom = {
+  _entries: [],
+  _maxEntries: 50,
+
+  init() {
+    document.addEventListener("agent:voted", (e) => this._addVote(e.detail));
+    document.addEventListener("cycle:started", () => this._clear());
+    document.addEventListener("state:full", (e) => {
+      // Rebuild from existing votes
+      this._clear();
+      const votes = e.detail.votes || {};
+      for (const [id, v] of Object.entries(votes)) {
+        this._addVote(v, true);
+      }
+    });
+  },
+
+  _clear() {
+    this._entries = [];
+    const feed = document.getElementById("debate-feed");
+    if (feed) feed.innerHTML = "";
+    this._updateCount();
+  },
+
+  _addVote(d, silent) {
+    const dir = (d.direction || "NEUTRAL").toUpperCase();
+    const dirEmoji = dir === "BULL" ? "\uD83D\uDFE2" : dir === "BEAR" ? "\uD83D\uDD34" : "\u26AA";
+    const dirClass = dir === "BULL" ? "dir-bull" : dir === "BEAR" ? "dir-bear" : "dir-neutral";
+    const flipped = d.changed_from ? true : false;
+    const conv = d.conviction || 0;
+    const name = d.agent_name || d.agent_id || "?";
+    const reasoning = d.reasoning || d.trade_idea || "";
+    const roundNum = d.round_num || SwarmState.current_round || "?";
+    const reasoningText = reasoning.length > 120 ? reasoning.slice(0, 117) + "..." : reasoning;
+
+    const entry = {
+      roundNum, dirEmoji, dirClass, flipped, name, conv, reasoningText, dir
+    };
+    this._entries.push(entry);
+    if (this._entries.length > this._maxEntries) this._entries.shift();
+
+    const feed = document.getElementById("debate-feed");
+    if (!feed) return;
+
+    const el = document.createElement("div");
+    el.className = "debate-entry " + dirClass;
+    if (!silent) el.style.animation = "debate-slide .3s ease-out";
+
+    el.innerHTML = `
+      <span class="debate-round">R${_esc(String(roundNum))}</span>
+      <span class="debate-dir">${dirEmoji}</span>
+      ${flipped ? '<span class="debate-flip">&#8634;</span>' : ''}
+      <span class="debate-name">${_esc(name)}</span>
+      <span class="debate-conv">(${conv}%)</span>
+      <span class="debate-text">${_esc(reasoningText)}</span>
+    `;
+
+    feed.appendChild(el);
+
+    // Auto-scroll to bottom
+    feed.scrollTop = feed.scrollHeight;
+
+    // Prune DOM
+    while (feed.children.length > this._maxEntries) {
+      feed.removeChild(feed.firstChild);
+    }
+
+    this._updateCount();
+  },
+
+  _updateCount() {
+    const el = document.getElementById("debate-count");
+    if (el) el.textContent = this._entries.length + " votes";
   },
 };
 
 // ── Activity Log ────────────────────────────────────────────
 
 const ActivityLog = {
-  _max: 100,
+  _max: 80,
 
   init() {
     document.addEventListener("event:any", (e) => this._add(e.detail));
@@ -323,7 +563,6 @@ const ActivityLog = {
     const msg = this._describe(type, data);
 
     const typeColor = type.includes("error") ? "bear"
-                    : type.includes("bull") ? "bull"
                     : type.includes("consensus") || type.includes("trade_card") ? "bull"
                     : "accent";
 
@@ -337,7 +576,6 @@ const ActivityLog = {
 
     wrap.prepend(entry);
 
-    // Prune old entries
     while (wrap.children.length > this._max) {
       wrap.removeChild(wrap.lastChild);
     }
@@ -352,7 +590,7 @@ const ActivityLog = {
       case "round_started":       return `Round ${d.round_num}/${d.total_rounds} deliberation`;
       case "agent_voted":
         const flip = d.changed_from ? ` (flipped from ${d.changed_from})` : "";
-        return `${d.agent_name} [${d.tribe}] -> ${d.direction} (${d.conviction}/10)${flip}`;
+        return `${d.agent_name} [${d.tribe}] -> ${d.direction} (${d.conviction}%)${flip}`;
       case "round_completed":
         const vc = d.vote_counts || {};
         return `Bull:${vc.BULL||vc.bull||0} Bear:${vc.BEAR||vc.bear||0} Neutral:${vc.NEUTRAL||vc.neutral||0}`;
@@ -391,5 +629,6 @@ document.addEventListener("DOMContentLoaded", () => {
   TradeCard.init();
   ConsensusGauge.init();
   RoundTimeline.init();
+  DebateRoom.init();
   ActivityLog.init();
 });

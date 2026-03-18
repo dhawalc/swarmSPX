@@ -19,10 +19,14 @@ from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
+from dotenv import load_dotenv
+load_dotenv()
+
 from swarmspx.events import EventBus
 from swarmspx.web.state import CycleState
 from swarmspx.web.ws_manager import WebSocketManager
 from swarmspx.web.routes import create_router
+from swarmspx.alerts.dispatcher import AlertDispatcher
 
 log = logging.getLogger(__name__)
 STATIC_DIR = Path(__file__).resolve().parent / "static"
@@ -67,10 +71,16 @@ def create_app(
         ws_mgr.start()
         app.state.ws_manager = ws_mgr
 
+        # Start alert dispatcher (Telegram + Slack)
+        alert_dispatcher = AlertDispatcher(bus, min_confidence=70.0)
+        alert_dispatcher.start()
+        app.state.alert_dispatcher = alert_dispatcher
+
         log.info("SwarmSPX dashboard started")
         yield
 
         # Shutdown
+        alert_dispatcher.stop()
         await ws_mgr.stop()
         await state.stop()
         log.info("SwarmSPX dashboard stopped")

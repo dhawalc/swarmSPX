@@ -3,27 +3,39 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>SwarmSPX Dashboard</title>
+  <title>SwarmSPX — Neural Intelligence Command Center</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;600;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="/static/css/swarm.css">
 </head>
 <body>
 
-<!-- ── Top Bar ──────────────────────────────────────────── -->
+<!-- Scan-line overlay -->
+<div class="scanlines"></div>
+
+<!-- ── Top Market Bar ──────────────────────────────────────── -->
 <header id="topbar">
-  <div class="logo">SWARM<span>SPX</span></div>
+  <div class="logo">
+    <span class="logo-swarm">SWARM</span><span class="logo-spx">SPX</span>
+    <span class="logo-tag">NEURAL INTELLIGENCE</span>
+  </div>
 
   <div class="market-ticker">
-    <div class="ticker-item">
-      <span class="ticker-label">SPX</span>
+    <div class="ticker-item ticker-spx">
+      <span class="ticker-label">S&amp;P 500</span>
       <span class="ticker-value lg mono" id="spx-price">--</span>
     </div>
     <div class="ticker-item">
-      <span class="ticker-label">Chg</span>
+      <span class="ticker-label">Change</span>
       <span class="ticker-value mono dim" id="spx-change">--%</span>
     </div>
     <div class="ticker-item">
       <span class="ticker-label">VIX</span>
-      <span class="ticker-value mono" id="vix-level">--</span>
+      <div class="vix-wrap">
+        <span class="ticker-value mono" id="vix-level">--</span>
+        <div class="vix-thermo"><div class="vix-thermo-fill" id="vix-thermo-fill"></div></div>
+      </div>
     </div>
     <div class="ticker-item">
       <span class="ticker-label">VWAP Dist</span>
@@ -43,7 +55,10 @@
   </div>
 
   <div class="topbar-right">
-    <button id="trigger-btn">Run Cycle</button>
+    <button id="trigger-btn">
+      <span class="trigger-icon"></span>
+      Run Cycle
+    </button>
     <div id="ws-status">
       <span class="status-dot error"></span>
       <span class="ws-label mono" style="font-size:.7rem;">OFFLINE</span>
@@ -51,12 +66,15 @@
   </div>
 </header>
 
-<!-- ── Dashboard Grid ──────────────────────────────────── -->
+<!-- ── Dashboard Grid ──────────────────────────────────────── -->
 <main id="dashboard">
 
-  <!-- LEFT: Agent Network -->
-  <section id="panel-left" class="card">
-    <div class="card-header">Agent Network</div>
+  <!-- LEFT: Agent Network (hero) -->
+  <section id="panel-network" class="card">
+    <div class="card-header">
+      <span class="card-header-icon">&#9673;</span> Agent Network
+      <span class="card-header-stat" id="network-stat"></span>
+    </div>
     <div id="agent-canvas-wrap">
       <canvas id="agent-canvas"></canvas>
     </div>
@@ -65,23 +83,27 @@
   <!-- CENTER: Trade Card + Consensus -->
   <section id="panel-center">
     <div id="trade-card" class="card">
-      <div class="card-header">Trade Signal</div>
-      <div style="padding:40px 20px;text-align:center;">
-        <span class="dim mono" style="font-size:.85rem;">Waiting for cycle...</span>
+      <div class="card-header">
+        <span class="card-header-icon">&#9889;</span> Trade Signal
+      </div>
+      <div class="tc-waiting">
+        <div class="tc-scan-text">AWAITING SIGNAL</div>
+        <div class="tc-scan-bar"></div>
       </div>
     </div>
 
     <div id="consensus-wrap" class="card">
-      <div class="card-header">Consensus</div>
-      <svg class="gauge-svg" viewBox="0 0 220 130">
-        <path d="M 25 105 A 85 85 0 1 1 195 105"
-              fill="none" stroke="var(--border)" stroke-width="10" stroke-linecap="round" />
-      </svg>
-      <div class="gauge-value mono" style="font-size:2rem;font-weight:700;">--</div>
-      <div class="gauge-sub mono"></div>
-      <div class="vote-bar-wrap">
-        <div class="vote-bar"></div>
-        <div class="vote-bar-legend"></div>
+      <div class="card-header">
+        <span class="card-header-icon">&#9678;</span> Consensus
+      </div>
+      <div class="consensus-inner">
+        <svg class="gauge-svg" id="gauge-svg" viewBox="0 0 220 130"></svg>
+        <div class="gauge-value mono" id="gauge-value">--</div>
+        <div class="gauge-sub mono" id="gauge-sub"></div>
+        <div class="vote-bar-wrap">
+          <div class="vote-bar" id="vote-bar"></div>
+          <div class="vote-bar-legend" id="vote-bar-legend"></div>
+        </div>
       </div>
     </div>
 
@@ -91,27 +113,39 @@
     </div>
   </section>
 
-  <!-- RIGHT: Round Timeline -->
+  <!-- RIGHT: Rounds + Debate Room -->
   <section id="panel-right">
     <div id="round-timeline" class="card">
-      <div class="card-header">Deliberation Rounds</div>
-      <div class="tl-rounds" style="padding:12px;">
+      <div class="card-header">
+        <span class="card-header-icon">&#9201;</span> Deliberation Rounds
+      </div>
+      <div class="tl-rounds" id="tl-rounds">
         <div class="dim mono" style="font-size:.8rem;text-align:center;padding:20px 0;">
           No rounds yet
         </div>
       </div>
     </div>
+
+    <div id="debate-room" class="card">
+      <div class="card-header">
+        <span class="card-header-icon">&#128172;</span> Debate Room
+        <span class="card-header-stat" id="debate-count">0 votes</span>
+      </div>
+      <div id="debate-feed"></div>
+    </div>
   </section>
 
   <!-- BOTTOM: Activity Log -->
   <section id="panel-bottom" class="card">
-    <div class="card-header">Activity Log</div>
+    <div class="card-header">
+      <span class="card-header-icon">&#9656;</span> Activity Log
+    </div>
     <div id="activity-log"></div>
   </section>
 
 </main>
 
-<!-- ── Scripts (order matters) ─────────────────────────── -->
+<!-- ── Scripts (order matters) ─────────────────────────────── -->
 <script src="/static/js/swarm.js"></script>
 <script src="/static/js/components.js"></script>
 <script src="/static/js/agent_network.js"></script>
