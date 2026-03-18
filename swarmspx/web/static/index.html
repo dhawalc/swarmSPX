@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>SwarmSPX Dashboard</title>
+  <link rel="stylesheet" href="/static/css/swarm.css">
+</head>
+<body>
+
+<!-- ── Top Bar ──────────────────────────────────────────── -->
+<header id="topbar">
+  <div class="logo">SWARM<span>SPX</span></div>
+
+  <div class="market-ticker">
+    <div class="ticker-item">
+      <span class="ticker-label">SPX</span>
+      <span class="ticker-value lg mono" id="spx-price">--</span>
+    </div>
+    <div class="ticker-item">
+      <span class="ticker-label">Chg</span>
+      <span class="ticker-value mono dim" id="spx-change">--%</span>
+    </div>
+    <div class="ticker-item">
+      <span class="ticker-label">VIX</span>
+      <span class="ticker-value mono" id="vix-level">--</span>
+    </div>
+    <div class="ticker-item">
+      <span class="ticker-label">VWAP Dist</span>
+      <span class="ticker-value mono dim" id="vwap-distance">--</span>
+    </div>
+    <div class="ticker-item">
+      <span class="ticker-label">Regime</span>
+      <span class="regime-badge unknown" id="regime-badge">--</span>
+    </div>
+    <div class="ticker-item">
+      <span class="ticker-label">Cycle</span>
+      <span class="ticker-value" style="display:flex;align-items:center;">
+        <span class="status-dot idle" id="cycle-status-dot"></span>
+        <span class="mono" id="cycle-status-label" style="font-size:.8rem;">IDLE</span>
+      </span>
+    </div>
+  </div>
+
+  <div class="topbar-right">
+    <button id="trigger-btn">Run Cycle</button>
+    <div id="ws-status">
+      <span class="status-dot error"></span>
+      <span class="ws-label mono" style="font-size:.7rem;">OFFLINE</span>
+    </div>
+  </div>
+</header>
+
+<!-- ── Dashboard Grid ──────────────────────────────────── -->
+<main id="dashboard">
+
+  <!-- LEFT: Agent Network -->
+  <section id="panel-left" class="card">
+    <div class="card-header">Agent Network</div>
+    <div id="agent-canvas-wrap">
+      <canvas id="agent-canvas"></canvas>
+    </div>
+  </section>
+
+  <!-- CENTER: Trade Card + Consensus -->
+  <section id="panel-center">
+    <div id="trade-card" class="card">
+      <div class="card-header">Trade Signal</div>
+      <div style="padding:40px 20px;text-align:center;">
+        <span class="dim mono" style="font-size:.85rem;">Waiting for cycle...</span>
+      </div>
+    </div>
+
+    <div id="consensus-wrap" class="card">
+      <div class="card-header">Consensus</div>
+      <svg class="gauge-svg" viewBox="0 0 220 130">
+        <path d="M 25 105 A 85 85 0 1 1 195 105"
+              fill="none" stroke="var(--border)" stroke-width="10" stroke-linecap="round" />
+      </svg>
+      <div class="gauge-value mono" style="font-size:2rem;font-weight:700;">--</div>
+      <div class="gauge-sub mono"></div>
+      <div class="vote-bar-wrap">
+        <div class="vote-bar"></div>
+        <div class="vote-bar-legend"></div>
+      </div>
+    </div>
+
+    <div class="alert-badges">
+      <span id="alert-contrarian" class="alert-badge hidden"></span>
+      <span id="alert-herding" class="alert-badge hidden"></span>
+    </div>
+  </section>
+
+  <!-- RIGHT: Round Timeline -->
+  <section id="panel-right">
+    <div id="round-timeline" class="card">
+      <div class="card-header">Deliberation Rounds</div>
+      <div class="tl-rounds" style="padding:12px;">
+        <div class="dim mono" style="font-size:.8rem;text-align:center;padding:20px 0;">
+          No rounds yet
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- BOTTOM: Activity Log -->
+  <section id="panel-bottom" class="card">
+    <div class="card-header">Activity Log</div>
+    <div id="activity-log"></div>
+  </section>
+
+</main>
+
+<!-- ── Scripts (order matters) ─────────────────────────── -->
+<script src="/static/js/swarm.js"></script>
+<script src="/static/js/components.js"></script>
+<script src="/static/js/agent_network.js"></script>
+
+</body>
+</html>

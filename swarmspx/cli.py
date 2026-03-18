@@ -83,9 +83,13 @@ def _run_tui(args):
 
 def _run_web(args):
     import uvicorn
+    from swarmspx.events import EventBus
+    from swarmspx.engine import SwarmSPXEngine
     from swarmspx.web.app import create_app
 
-    app = create_app(settings_path=args.config)
+    bus = EventBus()
+    engine = SwarmSPXEngine(settings_path=args.config, bus=bus)
+    app = create_app(bus=bus, engine=engine, settings_path=args.config)
     uvicorn.run(app, host=args.host, port=args.port)
 
 
