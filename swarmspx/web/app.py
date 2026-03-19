@@ -23,6 +23,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 from swarmspx.events import EventBus
+from swarmspx.scoring import AgentScorer
 from swarmspx.web.state import CycleState
 from swarmspx.web.ws_manager import WebSocketManager
 from swarmspx.web.routes import create_router
@@ -64,6 +65,10 @@ def create_app(
         app.state.engine = engine
         app.state.bus = bus
         app.state.cycle_state = state
+
+        # Initialise agent scorer (uses the engine's DB connection)
+        scorer = AgentScorer(engine.db)
+        app.state.scorer = scorer
 
         # Start background consumers
         state.start(bus)

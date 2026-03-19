@@ -91,6 +91,9 @@ const AgentNetwork = (() => {
   let time = 0;
   let lastTime = 0;
 
+  // ELO map from leaderboard: {agent_id: elo}
+  let _eloMap = {};
+
   // Consensus climax state (Upgrade 1)
   let consensusFlash = { active: false, alpha: 0, color: "#ffffff" };
   let consensusGlow = { active: false, alpha: 0, color: "#ffffff" };
@@ -326,6 +329,13 @@ const AgentNetwork = (() => {
       particleSpeedMult = 3.0;
     });
 
+    // ELO leaderboard updates: scale node sizes + apply hot/cold tint
+    document.addEventListener("leaderboard:updated", (e) => {
+      dirty = true;
+      _eloMap = (e.detail && e.detail.eloMap) ? e.detail.eloMap : {};
+      _applyEloToNodes();
+    });
+
     // ── UPGRADE 1: Trade card dramatic flash ─────────────
     document.addEventListener("tradecard:generated", (e) => {
       dirty = true;
@@ -398,8 +408,9 @@ const AgentNetwork = (() => {
       // Smooth conviction
       n.conv += (n.targetConv - n.conv) * 0.08;
 
-      // Target radius: 24-30 based on conviction
-      n.tr = 24 + (n.conv / 100) * 6;
+      // Target radius: ELO-scaled base (18-32) + conviction bonus (0-6)
+      const eloBase = n.eloRadius || 24;
+      n.tr = eloBase + (n.conv / 100) * 6;
       n.r += (n.tr - n.r) * 0.08;
 
       // Glow decay
@@ -729,6 +740,34 @@ const AgentNetwork = (() => {
     }
   }
 
+  // ── ELO Scaling ─────────────────────────────────────────
+  function _applyEloToNodes() {
+    const DEFAULT_ELO = 1000;
+    const MIN_R = 18;  // minimum node radius at low ELO
+    const MAX_R = 32;  // maximum node radius at high ELO
+
+    for (const n of nodes) {
+      const elo = _eloMap[n.id] || DEFAULT_ELO;
+      // Map ELO 850-1150 → radius 18-32
+      const t = Math.max(0, Math.min(1, (elo - 850) / 300));
+      n.eloRadius = MIN_R + t * (MAX_R - MIN_R);
+      n.elo = elo;
+
+      // Hot/cold colour overlay alpha (shown as second fill layer)
+      // elo > 1050: green tint;  elo < 950: red tint
+      if (elo >= 1050) {
+        n.eloTintColor = "#00e676";
+        n.eloTintAlpha = Math.min(0.25, (elo - 1050) / 200);
+      } else if (elo <= 950) {
+        n.eloTintColor = "#ff1744";
+        n.eloTintAlpha = Math.min(0.25, (950 - elo) / 200);
+      } else {
+        n.eloTintColor = null;
+        n.eloTintAlpha = 0;
+      }
+    }
+  }
+
   function _drawNode(n) {
     const col = DIR_COLORS[n.dir] || "#37474f";
 
@@ -843,6 +882,18 @@ const AgentNetwork = (() => {
     ctx.arc(n.x, n.y, drawR, 0, Math.PI * 2);
     ctx.fill();
     ctx.restore();
+
+    // ELO hot/cold tint overlay
+    if (n.eloTintColor && n.eloTintAlpha > 0.005) {
+      ctx.save();
+      ctx.globalAlpha = n.eloTintAlpha;
+      ctx.fillStyle = n.eloTintColor;
+      ctx.beginPath();
+      ctx.arc(n.x, n.y, drawR * 0.7, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.globalAlpha = 1;
+      ctx.restore();
+    }
 
     // Conviction ARC (glowing arc around node, like a loading spinner)
     if (n.conv > 5) {

@@ -10,6 +10,7 @@ from swarmspx.db import Database
 from swarmspx.ingest.market_data import MarketDataFetcher
 from swarmspx.memory import AOMemory
 from swarmspx.events import EventBus, OutcomeResolved
+from swarmspx.scoring import AgentScorer
 
 logger = logging.getLogger(__name__)
 
@@ -34,11 +35,13 @@ class OutcomeTracker:
         fetcher: MarketDataFetcher,
         memory: AOMemory,
         bus: EventBus,
+        scorer: Optional[AgentScorer] = None,
     ) -> None:
         self.db = db
         self.fetcher = fetcher
         self.memory = memory
         self.bus = bus
+        self.scorer = scorer
 
     async def check_pending_signals(self) -> list[dict]:
         """Check all pending signals and resolve those that are old enough.
@@ -101,6 +104,23 @@ class OutcomeTracker:
             memory_id = signal.get("memory_id")
             if memory_id:
                 self.memory.store_outcome(memory_id, outcome, pnl_pct)
+
+            # Update Darwinian agent scores
+            if self.scorer and outcome in ("win", "loss"):
+                agent_votes = self.db.get_agent_votes_for_signal(signal["id"])
+                if agent_votes:
+                    regime = agent_votes[0].get("regime", "unknown")
+                    self.scorer.process_signal_outcome(
+                        signal_id=signal["id"],
+                        outcome=outcome,
+                        regime=regime,
+                        agent_votes=agent_votes,
+                        consensus_direction=direction,
+                    )
+                    logger.info(
+                        "Updated %d agent ELO scores for signal #%d (%s)",
+                        len(agent_votes), signal["id"], outcome,
+                    )
 
             # Emit event
             await self.bus.emit(OutcomeResolved(

@@ -1,4 +1,5 @@
 import asyncio
+import logging
 import time
 import yaml
 from typing import Optional
@@ -9,6 +10,7 @@ from swarmspx.report.generator import ReportGenerator
 from swarmspx.providers import resolve_synthesis_model
 from swarmspx.memory import AOMemory
 from swarmspx.db import Database
+from swarmspx.scoring import AgentScorer
 from swarmspx.events import (
     EventBus, NoOpBus,
     CycleStarted, MarketDataFetched, ConsensusReached,
@@ -17,6 +19,8 @@ from swarmspx.events import (
 )
 from swarmspx.tracking.outcome_tracker import OutcomeTracker
 from swarmspx.strategy.selector import select_strategy
+
+logger = logging.getLogger(__name__)
 
 class SwarmSPXEngine:
     """Main orchestrator for the full simulation pipeline."""
@@ -48,7 +52,8 @@ class SwarmSPXEngine:
         )
         self.db = Database(self.settings["database"]["path"])
         self.db.init_schema()
-        self.tracker = OutcomeTracker(self.db, self.fetcher, self.memory, self.bus)
+        self.scorer = AgentScorer(self.db)
+        self.tracker = OutcomeTracker(self.db, self.fetcher, self.memory, self.bus, self.scorer)
 
     async def run_cycle(self) -> dict:
         """Run one full simulation cycle."""
@@ -70,8 +75,10 @@ class SwarmSPXEngine:
         # 2. Store snapshot
         self.db.store_snapshot(market_context)
 
-        # 3. Run simulation
-        consensus = await self.pit.run(market_context)
+        # 3. Get agent weights for current regime and run simulation
+        regime = market_context.get("market_regime", "unknown")
+        agent_weights = self.scorer.get_weights(regime)
+        consensus = await self.pit.run(market_context, agent_weights=agent_weights)
         await self.bus.emit(ConsensusReached(consensus=consensus))
 
         # 4. Select strategy based on consensus + regime + options
@@ -109,6 +116,12 @@ class SwarmSPXEngine:
             "trade_setup": trade_card,
             "agent_votes": consensus.get("vote_counts", {}),
         })
+
+        # 8b. Store individual agent votes for Darwinian scoring
+        if signal_id and consensus.get("individual_votes"):
+            self.db.store_agent_votes(signal_id, consensus["individual_votes"], regime)
+            logger.info("Stored %d individual agent votes for signal #%d",
+                       len(consensus["individual_votes"]), signal_id)
 
         # 9. Check and resolve pending signals
         await self.tracker.check_pending_signals()

@@ -56,6 +56,9 @@
 
   <div class="topbar-right">
     <span class="cycle-timer" id="cycle-timer"></span>
+    <button id="lb-toggle-btn" class="lb-toggle-btn" aria-label="Toggle leaderboard (L)" title="Leaderboard (L)">
+      &#127942; Leaderboard
+    </button>
     <button id="trigger-btn" aria-label="Run analysis cycle">
       <span class="trigger-icon" aria-hidden="true"></span>
       Run Cycle
@@ -200,6 +203,27 @@
     <div id="activity-log"></div>
   </section>
 
+  <!-- LEADERBOARD: Agent ELO Rankings (toggled panel) -->
+  <section id="panel-leaderboard" class="card leaderboard-panel" aria-hidden="true">
+    <div class="card-header">
+      <span class="card-header-icon">&#127942;</span> Agent Leaderboard
+      <span class="card-header-stat" id="lb-stat"></span>
+      <select id="lb-regime-filter" class="lb-regime-select" aria-label="Filter by regime">
+        <option value="">All Regimes</option>
+        <option value="low_vol_grind">Low Vol Grind</option>
+        <option value="low_vol_trending">Low Vol Trending</option>
+        <option value="normal_vol">Normal Vol</option>
+        <option value="elevated_vol">Elevated Vol</option>
+        <option value="high_vol_panic">High Vol Panic</option>
+      </select>
+      <button id="lb-refresh-btn" class="lb-refresh-btn" aria-label="Refresh leaderboard">&#8635;</button>
+      <button id="lb-close-btn" class="lb-close-btn" aria-label="Close leaderboard">&#10005;</button>
+    </div>
+    <div id="lb-content">
+      <div id="lb-rows" class="lb-rows"></div>
+    </div>
+  </section>
+
 </main>
 
 <!-- Cinematic Mode Overlay (Upgrade 3) -->
@@ -237,6 +261,10 @@
     <span class="tab-icon" aria-hidden="true">&#128200;</span>
     History
   </button>
+  <button class="tab-btn" role="tab" aria-selected="false" data-tab="leaderboard">
+    <span class="tab-icon" aria-hidden="true">&#127942;</span>
+    Leaders
+  </button>
 </nav>
 
 <!-- ── Keyboard Shortcuts Overlay ────────────────────────── -->
@@ -248,6 +276,7 @@
     <div class="shortcut-row"><span class="shortcut-key">1</span><span class="shortcut-desc">Focus network</span></div>
     <div class="shortcut-row"><span class="shortcut-key">2</span><span class="shortcut-desc">Focus signal</span></div>
     <div class="shortcut-row"><span class="shortcut-key">3</span><span class="shortcut-desc">Focus debate</span></div>
+    <div class="shortcut-row"><span class="shortcut-key">L</span><span class="shortcut-desc">Toggle leaderboard</span></div>
     <div class="shortcut-row"><span class="shortcut-key">?</span><span class="shortcut-desc">Show shortcuts</span></div>
     <div class="shortcut-row"><span class="shortcut-key">Esc</span><span class="shortcut-desc">Close / exit</span></div>
   </div>
@@ -257,6 +286,7 @@
 <script src="/static/js/swarm.js"></script>
 <script src="/static/js/components.js"></script>
 <script src="/static/js/agent_network.js"></script>
+<script src="/static/js/leaderboard.js"></script>
 
 </body>
 </html>

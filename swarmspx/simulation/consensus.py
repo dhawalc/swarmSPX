@@ -1,14 +1,20 @@
-from collections import Counter
+from collections import Counter, defaultdict
 from swarmspx.agents.base import AgentVote
 from typing import Optional
 
 class ConsensusExtractor:
     """Extracts actionable signal from 24 agent votes."""
 
-    def extract(self, votes: list[AgentVote], prior_votes: Optional[list[AgentVote]] = None) -> dict:
+    def extract(
+        self,
+        votes: list[AgentVote],
+        prior_votes: Optional[list[AgentVote]] = None,
+        agent_weights: Optional[dict[str, float]] = None,
+    ) -> dict:
         if not votes:
             return self._empty_consensus()
 
+        # --- Raw (equal-weight) vote counts ---
         vote_counts = Counter(v.direction for v in votes)
         total = len(votes)
         majority_dir = vote_counts.most_common(1)[0][0]
@@ -35,10 +41,23 @@ class ConsensusExtractor:
         # Opinion shifters
         shifters = [v for v in votes if v.changed_from is not None]
 
-        # Trade setup
-        trade_setup = self._construct_trade_setup(majority_dir, confidence, votes)
+        # --- Performance-weighted voting (optional) ---
+        weighted_fields = self._compute_weighted_fields(
+            votes, majority_dir, agreement_pct, agent_weights
+        )
 
-        return {
+        # Herding: also flag when weighted agreement diverges significantly from raw
+        weight_divergence = (
+            abs(weighted_fields["weighted_agreement_pct"] - agreement_pct) > 15
+            if agent_weights
+            else False
+        )
+
+        # Trade setup (use weighted direction when weights are provided)
+        effective_direction = weighted_fields["weighted_direction"] if agent_weights else majority_dir
+        trade_setup = self._construct_trade_setup(effective_direction, confidence, votes)
+
+        result = {
             "direction": majority_dir,
             "confidence": round(confidence, 1),
             "agreement_pct": round(agreement_pct, 1),
@@ -51,11 +70,84 @@ class ConsensusExtractor:
             "strongest_bear_conviction": bear_votes[0].conviction if bear_votes else 0,
             "contrarian_alert": contrarian_alert,
             "contrarian_count": len(minority_votes),
-            "herding_detected": herding,
+            "herding_detected": herding or weight_divergence,
+            "weight_divergence": weight_divergence,
             "opinion_shifters": len(shifters),
             "trade_setup": trade_setup,
             "top_trade_ideas": self._aggregate_trade_ideas(majority_votes[:5]),
         }
+
+        # Merge weighted fields (always present; None values when weights not provided)
+        result.update(weighted_fields)
+        return result
+
+    # ------------------------------------------------------------------
+    # Weighted voting helpers
+    # ------------------------------------------------------------------
+
+    def _compute_weighted_fields(
+        self,
+        votes: list[AgentVote],
+        raw_majority_dir: str,
+        raw_agreement_pct: float,
+        agent_weights: Optional[dict[str, float]],
+    ) -> dict:
+        """
+        Compute all performance-weighted fields.
+
+        When agent_weights is None, returns neutral/passthrough values so the
+        caller always gets the same set of keys.
+        """
+        if not agent_weights:
+            return {
+                "weighted_direction": raw_majority_dir,
+                "weighted_agreement_pct": raw_agreement_pct,
+                "weight_boost": 0.0,
+                "top_weighted_agents": [],
+            }
+
+        # Sum weights per direction; unweighted agents default to equal share
+        equal_fallback = 1.0 / len(votes) if votes else 0.0
+        weighted_sums: dict[str, float] = defaultdict(float)
+        for v in votes:
+            w = agent_weights.get(v.agent_id, equal_fallback)
+            weighted_sums[v.direction] += w
+
+        total_weight = sum(weighted_sums.values()) or 1.0  # guard against zero
+
+        # Winning direction by weight
+        weighted_dir = max(weighted_sums, key=lambda d: weighted_sums[d])
+        winner_weight = weighted_sums[weighted_dir]
+
+        # Weighted agreement as a percentage of total weight
+        weighted_agreement_pct = (winner_weight / total_weight) * 100
+
+        # How much weighting changed conviction vs raw vote counting
+        raw_winner_pct = (
+            (sum(1 for v in votes if v.direction == weighted_dir) / len(votes)) * 100
+            if votes
+            else 0.0
+        )
+        weight_boost = round(weighted_agreement_pct - raw_winner_pct, 1)
+
+        # Top 5 agents by weight within the winning direction
+        winning_votes = [v for v in votes if v.direction == weighted_dir]
+        top_weighted_agents = sorted(
+            winning_votes,
+            key=lambda v: agent_weights.get(v.agent_id, equal_fallback),
+            reverse=True,
+        )[:5]
+
+        return {
+            "weighted_direction": weighted_dir,
+            "weighted_agreement_pct": round(weighted_agreement_pct, 1),
+            "weight_boost": weight_boost,
+            "top_weighted_agents": [v.agent_id for v in top_weighted_agents],
+        }
+
+    # ------------------------------------------------------------------
+    # Existing helpers (unchanged)
+    # ------------------------------------------------------------------
 
     def detect_herding(self, prior_votes: list[AgentVote], current_votes: list[AgentVote]) -> bool:
         """True if too many agents changed their mind in one round (herd behavior)."""
@@ -94,6 +186,11 @@ class ConsensusExtractor:
             "vote_counts": {},
             "contrarian_alert": False,
             "herding_detected": False,
+            "weight_divergence": False,
             "opinion_shifters": 0,
             "trade_setup": {"direction": "NEUTRAL", "action": "WAIT"},
+            "weighted_direction": "NEUTRAL",
+            "weighted_agreement_pct": 0.0,
+            "weight_boost": 0.0,
+            "top_weighted_agents": [],
         }

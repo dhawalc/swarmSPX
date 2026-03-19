@@ -48,7 +48,9 @@ async def test_outcome_tracker_resolves_old_signals(tracker, db):
 
     # Manually set the signal timestamp to 3 hours ago (store_simulation_result uses datetime.now())
     old_ts = (datetime.now() - timedelta(hours=3)).isoformat()
-    db.conn.execute("UPDATE simulation_results SET timestamp = ? WHERE id = ?", [old_ts, sig_id])
+    conn = db._connect()
+    conn.execute("UPDATE simulation_results SET timestamp = ? WHERE id = ?", [old_ts, sig_id])
+    db._close(conn)
 
     resolved = await tracker.check_pending_signals()
 
@@ -85,7 +87,9 @@ async def test_outcome_tracker_bear_win(tracker, db):
     """BEAR signal wins when price drops."""
     sig_id = _insert_signal(db, direction="BEAR", entry_price=5800.0, hours_ago=3)
     old_ts = (datetime.now() - timedelta(hours=3)).isoformat()
-    db.conn.execute("UPDATE simulation_results SET timestamp = ? WHERE id = ?", [old_ts, sig_id])
+    conn = db._connect()
+    conn.execute("UPDATE simulation_results SET timestamp = ? WHERE id = ?", [old_ts, sig_id])
+    db._close(conn)
 
     # Price dropped to 5770 → BEAR wins
     tracker.fetcher.get_snapshot.return_value = {"spx_price": 5770.0}
@@ -101,7 +105,9 @@ async def test_outcome_tracker_loss(tracker, db):
     """BULL signal loses when price drops."""
     sig_id = _insert_signal(db, direction="BULL", entry_price=5800.0, hours_ago=3)
     old_ts = (datetime.now() - timedelta(hours=3)).isoformat()
-    db.conn.execute("UPDATE simulation_results SET timestamp = ? WHERE id = ?", [old_ts, sig_id])
+    conn = db._connect()
+    conn.execute("UPDATE simulation_results SET timestamp = ? WHERE id = ?", [old_ts, sig_id])
+    db._close(conn)
 
     # Price dropped → BULL loses
     tracker.fetcher.get_snapshot.return_value = {"spx_price": 5750.0}
@@ -117,7 +123,9 @@ async def test_outcome_feeds_back_to_aoms(tracker, db):
     """Verify memory.store_outcome() is called on resolution."""
     sig_id = _insert_signal(db, direction="BULL", entry_price=5800.0, hours_ago=3, memory_id="aoms_456")
     old_ts = (datetime.now() - timedelta(hours=3)).isoformat()
-    db.conn.execute("UPDATE simulation_results SET timestamp = ? WHERE id = ?", [old_ts, sig_id])
+    conn = db._connect()
+    conn.execute("UPDATE simulation_results SET timestamp = ? WHERE id = ?", [old_ts, sig_id])
+    db._close(conn)
 
     tracker.fetcher.get_snapshot.return_value = {"spx_price": 5820.0}
 
@@ -134,7 +142,9 @@ async def test_outcome_emits_event(tracker, db):
     """Verify OutcomeResolved event is emitted on the bus."""
     sig_id = _insert_signal(db, direction="BULL", entry_price=5800.0, hours_ago=3)
     old_ts = (datetime.now() - timedelta(hours=3)).isoformat()
-    db.conn.execute("UPDATE simulation_results SET timestamp = ? WHERE id = ?", [old_ts, sig_id])
+    conn = db._connect()
+    conn.execute("UPDATE simulation_results SET timestamp = ? WHERE id = ?", [old_ts, sig_id])
+    db._close(conn)
 
     tracker.fetcher.get_snapshot.return_value = {"spx_price": 5830.0}
 

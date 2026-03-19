@@ -956,10 +956,11 @@ const CycleTimer = {
 
 const MobileTabs = {
   _panels: {
-    network: ["panel-network"],
-    signal:  ["panel-center"],
-    debate:  ["panel-right"],
-    history: ["panel-signals", "panel-bottom"],
+    network:     ["panel-network"],
+    signal:      ["panel-center"],
+    debate:      ["panel-right"],
+    history:     ["panel-signals", "panel-bottom"],
+    leaderboard: [],  // leaderboard uses its own overlay show/hide
   },
 
   init() {
@@ -977,6 +978,16 @@ const MobileTabs = {
       b.classList.toggle("active", isActive);
       b.setAttribute("aria-selected", isActive ? "true" : "false");
     });
+
+    // Handle leaderboard tab separately — toggle the overlay panel
+    const lbPanel = document.getElementById("panel-leaderboard");
+    if (tab === "leaderboard") {
+      if (lbPanel) lbPanel.classList.add("visible");
+      return;
+    } else {
+      if (lbPanel) lbPanel.classList.remove("visible");
+    }
+
     const allPanels = ["panel-network", "panel-center", "panel-right", "panel-signals", "panel-bottom"];
     allPanels.forEach(id => {
       const el = document.getElementById(id);
@@ -1012,6 +1023,12 @@ const KeyboardShortcuts = {
             if (btn && !btn.disabled) btn.click();
           }
           break;
+        case "l":
+        case "L": {
+          const lbBtn = document.getElementById("lb-toggle-btn");
+          if (lbBtn) lbBtn.click();
+          break;
+        }
         case "1":
           _scrollToPanel("panel-network");
           break;

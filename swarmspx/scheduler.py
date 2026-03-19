@@ -47,7 +47,7 @@ class SwarmScheduler:
         self.tz_offset = timezone_offset  # hours from ET (0 if server is ET)
         self._bus = EventBus()
         self._engine = SwarmSPXEngine(settings_path=settings_path, bus=self._bus)
-        self._dispatcher = AlertDispatcher(bus=self._bus, confidence_threshold=0)
+        self._dispatcher = AlertDispatcher(bus=self._bus, min_confidence=0)
         self._briefing = MorningBriefing(self._engine.fetcher)
         self._ran_today: set[str] = set()
 
@@ -155,7 +155,7 @@ class SwarmScheduler:
             f"  \\- Losses: {losses}",
             f"  \\- Pending: {pending}",
             "",
-            f"*All\\-time:* {_escape_md2(f'{stats.get(\"win_rate\", 0):.0f}')}% win rate "
+            f"*All\\-time:* {_escape_md2(str(round(stats.get('win_rate', 0))))}% win rate "
             f"\\({stats.get('total', 0)} signals\\)",
         ]
 

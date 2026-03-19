@@ -27,8 +27,13 @@ class TradingPit:
         self.consensus_extractor = ConsensusExtractor()
         self.bus = bus or NoOpBus()
 
-    async def run(self, market_context: dict) -> dict:
-        """Run a full simulation cycle and return consensus."""
+    async def run(self, market_context: dict, agent_weights: Optional[dict[str, float]] = None) -> dict:
+        """Run a full simulation cycle and return consensus.
+
+        Args:
+            market_context: Current market snapshot.
+            agent_weights: Optional ELO-derived weights for weighted consensus.
+        """
         all_rounds: list[list[AgentVote]] = []
         current_votes: list[AgentVote] = []
 
@@ -46,15 +51,21 @@ class TradingPit:
                 vote_counts=vote_counts,
             ))
 
-        # Final consensus from last round
+        # Final consensus from last round (with optional performance weights)
         prior = all_rounds[-2] if len(all_rounds) >= 2 else None
-        consensus = self.consensus_extractor.extract(current_votes, prior)
+        consensus = self.consensus_extractor.extract(current_votes, prior, agent_weights=agent_weights)
 
         # Add round-by-round drift analysis
         consensus["rounds"] = len(all_rounds)
         consensus["round_directions"] = [
             Counter(v.direction for v in r).most_common(1)[0][0]
             for r in all_rounds
+        ]
+
+        # Include individual votes for Darwinian scoring storage
+        consensus["individual_votes"] = [
+            {"agent_id": v.agent_id, "direction": v.direction, "conviction": v.conviction}
+            for v in current_votes
         ]
 
         return consensus

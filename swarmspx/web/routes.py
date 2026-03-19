@@ -4,11 +4,12 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import random
 from pathlib import Path
-from typing import Any
+from typing import Any, Optional
 
 import yaml
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Request
 
 from swarmspx.web.state import CycleState
 
@@ -78,5 +79,105 @@ def create_router(state: CycleState, engine: Any) -> APIRouter:
 
         asyncio.ensure_future(engine.run_cycle())
         return {"message": "Cycle triggered", "cycle_id": (snap.get("cycle_id") or 0) + 1}
+
+    @router.get("/leaderboard")
+    async def get_leaderboard(request: Request, regime: Optional[str] = None) -> dict:
+        """Return agent leaderboard sorted by ELO.
+
+        Optional ``?regime=normal_vol`` query param to filter by a single market
+        regime.  Without the param, mean ELO across all regimes is returned.
+        """
+        scorer = getattr(request.app.state, "scorer", None)
+        if scorer is None:
+            raise HTTPException(status_code=503, detail="Scorer not initialised")
+        rows = scorer.get_leaderboard(regime=regime)
+        return {
+            "regime": regime or "all",
+            "agents": rows,
+        }
+
+    @router.get("/agent/{agent_id}/profile")
+    async def get_agent_profile(request: Request, agent_id: str) -> dict:
+        """Full agent profile: ELO per regime, win history, accuracy trend."""
+        scorer = getattr(request.app.state, "scorer", None)
+        if scorer is None:
+            raise HTTPException(status_code=503, detail="Scorer not initialised")
+        from swarmspx.scoring import KNOWN_AGENTS
+        if agent_id not in KNOWN_AGENTS:
+            raise HTTPException(status_code=404, detail=f"Agent '{agent_id}' not found")
+        profile = scorer.get_agent_profile(agent_id)
+        return profile
+
+    @router.get("/backtest")
+    async def run_backtest(request: Request, signals: int = 500, seed: int = 42) -> dict:
+        """Run a Monte-Carlo backtest simulation and return aggregate results.
+
+        Simulates *signals* outcome events with seeded randomness, crediting all
+        24 known agents, then returns the leaderboard and summary statistics.
+        The live scorer is NOT mutated — a temporary in-memory scorer is used.
+        """
+        if signals < 1 or signals > 10_000:
+            raise HTTPException(status_code=400, detail="signals must be between 1 and 10000")
+
+        from swarmspx.scoring import AgentScorer, KNOWN_AGENTS, KNOWN_REGIMES
+
+        # Build an ephemeral scorer backed by an in-memory DuckDB instance
+        try:
+            from swarmspx.db import Database
+            tmp_db = Database(":memory:")
+        except Exception as exc:
+            raise HTTPException(status_code=500, detail=f"Could not create temp DB: {exc}")
+
+        tmp_scorer = AgentScorer(tmp_db)
+
+        rng = random.Random(seed)
+        regimes = list(KNOWN_REGIMES)
+        agents = list(KNOWN_AGENTS)
+        outcomes = ["win", "loss"]
+        directions = ["BULL", "BEAR", "NEUTRAL"]
+
+        wins = losses = 0
+        for i in range(signals):
+            regime = rng.choice(regimes)
+            consensus_dir = rng.choice(directions[:2])  # BULL or BEAR only
+            outcome = rng.choice(outcomes)
+            if outcome == "win":
+                wins += 1
+            else:
+                losses += 1
+
+            # Each agent casts a vote with random direction/conviction
+            agent_votes = [
+                {
+                    "agent_id": a,
+                    "direction": rng.choice(directions),
+                    "conviction": rng.uniform(10, 100),
+                }
+                for a in agents
+            ]
+            tmp_scorer.process_signal_outcome(
+                signal_id=i,
+                outcome=outcome,
+                regime=regime,
+                agent_votes=agent_votes,
+                consensus_direction=consensus_dir,
+            )
+
+        leaderboard = tmp_scorer.get_leaderboard()
+        top = leaderboard[0] if leaderboard else {}
+        bottom = leaderboard[-1] if leaderboard else {}
+
+        return {
+            "params": {"signals": signals, "seed": seed},
+            "summary": {
+                "total_signals": signals,
+                "wins": wins,
+                "losses": losses,
+                "win_rate": round(wins / signals * 100, 1),
+            },
+            "top_agent": top,
+            "bottom_agent": bottom,
+            "leaderboard": leaderboard,
+        }
 
     return router
