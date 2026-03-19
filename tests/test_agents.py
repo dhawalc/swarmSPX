@@ -61,14 +61,16 @@ def test_forge_creates_all_24_agents():
     assert "vwap_victor" in ids
     assert "synthesis_syd" in ids
 
-def test_forge_assigns_claude_cli_to_strategists():
+def test_forge_assigns_premium_local_to_strategists():
+    """Strategists use phi4:14b locally (058932c switched from Claude CLI)."""
     forge = AgentForge("config/agents.yaml")
     agents = forge.create_all()
     strategists = [a for a in agents if a.tribe == "strategists"]
     assert len(strategists) == 6
-    assert all(a.use_claude_cli is True for a in strategists)
-    assert all(a.claude_model == "sonnet" for a in strategists)
-    # Others should use Ollama
+    assert all(a.use_claude_cli is False for a in strategists)
+    assert all(a.model == "phi4:14b" for a in strategists)
+    # Others should use Ollama with llama3.1:8b
     others = [a for a in agents if a.tribe != "strategists"]
     assert len(others) == 18
     assert all(a.use_claude_cli is False for a in others)
+    assert all(a.model == "llama3.1:8b" for a in others)

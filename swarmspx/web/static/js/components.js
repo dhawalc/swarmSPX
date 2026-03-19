@@ -601,9 +601,86 @@ const ActivityLog = {
         const tc = d.trade_card || d;
         return `${tc.action || tc.direction || "?"} ${tc.instrument || "SPX"} Entry:${tc.entry_price_est || "?"}`;
       case "cycle_completed":     return `Cycle #${d.cycle_id} done in ${parseFloat(d.duration_sec || 0).toFixed(1)}s`;
+      case "outcome_resolved":
+        return `Signal #${d.signal_id} ${d.direction} → ${(d.outcome||"").toUpperCase()} ${d.outcome_pct >= 0 ? "+" : ""}${parseFloat(d.outcome_pct||0).toFixed(2)}%`;
       case "engine_error":        return d.message || "Unknown error";
       default:                    return JSON.stringify(d).slice(0, 120);
     }
+  },
+};
+
+// ── Signal History ───────────────────────────────────────────
+
+const SignalHistory = {
+  _loaded: false,
+
+  init() {
+    // Fetch on connect and after each cycle
+    document.addEventListener("ws:connected", () => this.fetch());
+    document.addEventListener("cycle:completed", () => this.fetch());
+  },
+
+  async fetch() {
+    try {
+      const [sigRes, statRes] = await Promise.all([
+        fetch("/api/signals"),
+        fetch("/api/stats"),
+      ]);
+      if (sigRes.ok) {
+        const { signals } = await sigRes.json();
+        this._renderTable(signals || []);
+      }
+      if (statRes.ok) {
+        const stats = await statRes.json();
+        this._renderStats(stats);
+      }
+    } catch (e) {
+      console.error("Signal fetch error:", e);
+    }
+  },
+
+  _renderStats(s) {
+    const el = document.getElementById("signals-stat");
+    if (!el) return;
+    if (s.resolved > 0) {
+      el.textContent = `${s.win_rate.toFixed(0)}% win | ${s.avg_pnl >= 0 ? "+" : ""}${s.avg_pnl}% avg | ${s.total} total`;
+    } else {
+      el.textContent = `${s.total} signals`;
+    }
+  },
+
+  _renderTable(signals) {
+    const tbody = document.getElementById("signals-tbody");
+    if (!tbody) return;
+
+    if (signals.length === 0) {
+      tbody.innerHTML = '<tr><td colspan="6" class="dim mono" style="text-align:center;">No signals yet</td></tr>';
+      return;
+    }
+
+    tbody.innerHTML = signals.map(s => {
+      const ts = s.timestamp ? new Date(s.timestamp).toLocaleTimeString("en-US", {
+        hour12: false, hour: "2-digit", minute: "2-digit"
+      }) : "--";
+      const dirClass = s.direction === "BULL" ? "bull" : s.direction === "BEAR" ? "bear" : "neut";
+      const outcomeClass = s.outcome === "win" ? "bull"
+                         : s.outcome === "loss" ? "bear"
+                         : s.outcome === "scratch" ? "accent" : "dim";
+      const pnl = s.outcome !== "pending" && s.outcome_pct != null
+                ? (s.outcome_pct >= 0 ? "+" : "") + s.outcome_pct.toFixed(2) + "%"
+                : "--";
+      const entry = s.spx_entry_price ? s.spx_entry_price.toFixed(2) : "--";
+      const conf = s.confidence != null ? s.confidence.toFixed(0) + "%" : "--";
+
+      return `<tr>
+        <td class="mono">${_esc(ts)}</td>
+        <td class="${dirClass}">${_esc(s.direction || "--")}</td>
+        <td class="mono">${_esc(conf)}</td>
+        <td class="mono">${_esc(entry)}</td>
+        <td class="${outcomeClass}">${_esc((s.outcome || "pending").toUpperCase())}</td>
+        <td class="mono ${outcomeClass}">${_esc(pnl)}</td>
+      </tr>`;
+    }).join("");
   },
 };
 
@@ -631,4 +708,5 @@ document.addEventListener("DOMContentLoaded", () => {
   RoundTimeline.init();
   DebateRoom.init();
   ActivityLog.init();
+  SignalHistory.init();
 });

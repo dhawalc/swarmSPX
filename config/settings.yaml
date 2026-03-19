@@ -29,6 +29,12 @@ tribe_models:
 
 synthesis_model: premium_local  # trade card synthesis via Phi-4 14B
 
+tradier:
+  # Set TRADIER_API_KEY in .env to enable live options data
+  # Sandbox: https://sandbox.tradier.com/v1 (free, delayed data)
+  # Production: https://api.tradier.com/v1 (requires funded account)
+  base_url: "https://sandbox.tradier.com/v1"
+
 aoms:
   base_url: "http://localhost:9100"
   recall_limit: 20

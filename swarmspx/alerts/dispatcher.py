@@ -11,15 +11,18 @@ from swarmspx.events import (
     TradeCardGenerated,
     ConsensusReached,
     EngineError,
+    OutcomeResolved,
 )
 from swarmspx.alerts.telegram import (
     format_trade_card as tg_format_card,
     format_error as tg_format_error,
+    format_outcome as tg_format_outcome,
     send_telegram,
 )
 from swarmspx.alerts.slack import (
     format_trade_card as slack_format_card,
     format_error as slack_format_error,
+    format_outcome as slack_format_outcome,
     send_slack,
 )
 
@@ -80,6 +83,8 @@ class AlertDispatcher:
         """Route a single event to the appropriate alert handlers."""
         if isinstance(event, TradeCardGenerated):
             await self._on_trade_card(event)
+        elif isinstance(event, OutcomeResolved):
+            await self._on_outcome(event)
         elif isinstance(event, EngineError):
             await self._on_error(event)
 
@@ -109,6 +114,19 @@ class AlertDispatcher:
         tg_text = tg_format_card(card)
         slack_payload = slack_format_card(card)
 
+        await asyncio.gather(
+            send_telegram(tg_text),
+            send_slack(slack_payload),
+            return_exceptions=True,
+        )
+
+    async def _on_outcome(self, event: OutcomeResolved) -> None:
+        logger.info(
+            "Dispatching outcome alert: signal %d %s %+.2f%%",
+            event.signal_id, event.outcome.upper(), event.outcome_pct,
+        )
+        tg_text = tg_format_outcome(event)
+        slack_payload = slack_format_outcome(event)
         await asyncio.gather(
             send_telegram(tg_text),
             send_slack(slack_payload),

@@ -1,15 +1,23 @@
+import logging
 import yfinance as yf
 import pandas as pd
 import numpy as np
 from datetime import datetime, timedelta
 from typing import Optional
 
+from swarmspx.ingest.tradier import TradierClient
+from swarmspx.ingest.options import OptionContract, OptionsSnapshot
+
+logger = logging.getLogger(__name__)
+
 class MarketDataFetcher:
-    """Fetches SPX, VIX, and options chain data via yfinance."""
+    """Fetches SPX, VIX, and options chain data via yfinance + Tradier."""
 
     def __init__(self, spx_ticker="^GSPC", vix_ticker="^VIX"):
         self.spx_ticker = spx_ticker
         self.vix_ticker = vix_ticker
+        self.tradier = TradierClient()
+        self._options_snapshot: Optional[OptionsSnapshot] = None
 
     def get_snapshot(self) -> dict:
         """Get current market state snapshot."""
@@ -48,7 +56,7 @@ class MarketDataFetcher:
                 "spx_vwap_distance_pct": round(((spx_price - vwap) / vwap) * 100, 3),
                 "vix_level": round(vix_level, 2),
                 "vix_change": round(vix_change, 2),
-                "put_call_ratio": 1.0,  # placeholder — CBOE data requires scraping
+                "put_call_ratio": 1.0,  # default — overridden by enrich_with_options()
                 "market_regime": regime,
                 "is_market_hours": self._is_market_hours(),
             }
@@ -76,6 +84,57 @@ class MarketDataFetcher:
         now = datetime.now()
         # Rough check — 9:30am-4:00pm ET (adjust for timezone)
         return 930 <= now.hour * 100 + now.minute <= 1600
+
+    async def enrich_with_options(self, snapshot: dict) -> dict:
+        """Add live options chain data to a market snapshot (if Tradier configured).
+
+        Mutates and returns the snapshot dict with options fields added.
+        """
+        if not self.tradier.is_configured:
+            return snapshot
+
+        spx_price = snapshot.get("spx_price", 0.0)
+        if not spx_price:
+            return snapshot
+
+        try:
+            raw_chain = await self.tradier.get_options_chain()
+            if not raw_chain:
+                logger.debug("Tradier returned empty chain")
+                return snapshot
+
+            contracts = [OptionContract.from_tradier(r) for r in raw_chain]
+            opts = OptionsSnapshot.from_chain(contracts, spx_price)
+            self._options_snapshot = opts
+
+            snapshot["put_call_ratio"] = opts.put_call_ratio
+            snapshot["atm_strike"] = opts.atm_strike
+            snapshot["atm_iv"] = opts.atm_iv
+
+            # Near-ATM contracts for agent prompts (5 calls + 5 puts closest to ATM)
+            near_atm = sorted(
+                contracts,
+                key=lambda c: abs(c.strike - spx_price),
+            )[:10]
+            snapshot["options_chain"] = [
+                {
+                    "strike": c.strike,
+                    "type": c.option_type,
+                    "bid": c.bid,
+                    "ask": c.ask,
+                    "delta": round(c.delta, 3),
+                    "gamma": round(c.gamma, 4),
+                    "theta": round(c.theta, 3),
+                    "vega": round(c.vega, 3),
+                    "iv": c.iv,
+                    "volume": c.volume,
+                }
+                for c in near_atm
+            ]
+        except Exception as e:
+            logger.warning("Tradier options fetch failed: %s", e)
+
+        return snapshot
 
     def _empty_snapshot(self) -> dict:
         return {

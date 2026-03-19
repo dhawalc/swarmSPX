@@ -63,6 +63,22 @@ def format_trade_card(card: dict) -> str:
             f"  \\|  *Stop:* {_escape_md2(f'${stop:.2f}')}"
         )
 
+    # Greeks line (from Tradier options data)
+    strike = card.get("strike")
+    delta = card.get("delta")
+    implied_vol = card.get("implied_vol")
+    premium_bid = card.get("premium_bid")
+    premium_ask = card.get("premium_ask")
+    if strike is not None and delta is not None:
+        greeks_parts = [f"*Strike:* {_escape_md2(f'{strike:.0f}')}"]
+        if premium_bid is not None and premium_ask is not None:
+            greeks_parts.append(f"*Premium:* {_escape_md2(f'${premium_bid:.2f}/${premium_ask:.2f}')}")
+        greeks_parts.append(f"*Delta:* {_escape_md2(f'{delta:.2f}')}")
+        if implied_vol is not None:
+            greeks_parts.append(f"*IV:* {_escape_md2(f'{implied_vol:.1f}%')}")
+        lines.append("")
+        lines.append("  \\|  ".join(greeks_parts))
+
     if rationale:
         lines.append("")
         lines.append(f"_{_escape_md2(rationale)}_")
@@ -83,6 +99,28 @@ def format_trade_card(card: dict) -> str:
     lines.append("")
     lines.append(f"_{_escape_md2(timestamp)}_")
     return "\n".join(lines)
+
+
+def format_outcome(event) -> str:
+    """Format an outcome resolution as Telegram MarkdownV2 message."""
+    outcome = event.outcome.upper()
+    pct = event.outcome_pct
+    direction = event.direction
+
+    if outcome == "WIN":
+        emoji = "\u2705"
+    elif outcome == "LOSS":
+        emoji = "\u274c"
+    else:
+        emoji = "\u2796"
+
+    return (
+        f"{emoji} *Signal Resolved*\n\n"
+        f"*Direction:* {_escape_md2(direction)}  \\|  "
+        f"*Outcome:* {_escape_md2(outcome)}\n"
+        f"*P&L:* {_escape_md2(f'{pct:+.2f}%')}\n\n"
+        f"_Signal \\#{_escape_md2(str(event.signal_id))}_"
+    )
 
 
 def format_error(message: str) -> str:

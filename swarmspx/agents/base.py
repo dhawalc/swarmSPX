@@ -57,8 +57,34 @@ Current SPX: ${market_context.get('spx_price', 0):.2f}
 SPX Change: {market_context.get('spx_change_pct', 0):+.2f}%
 SPX vs VWAP: {market_context.get('spx_vwap_distance_pct', 0):+.2f}%
 VIX: {market_context.get('vix_level', 0):.1f} ({market_context.get('vix_change', 0):+.2f})
+Put/Call Ratio: {market_context.get('put_call_ratio', 1.0):.2f}
 Regime: {market_context.get('market_regime', 'unknown')}
 """.strip()
+
+        # Options chain data (only if Tradier is configured)
+        options_str = ""
+        if market_context.get("options_chain"):
+            atm_strike = market_context.get("atm_strike", 0)
+            atm_iv = market_context.get("atm_iv", 0)
+            chain = market_context["options_chain"]
+            calls = [c for c in chain if c["type"] == "call"]
+            puts = [c for c in chain if c["type"] == "put"]
+            lines = [
+                f"\nOPTIONS DATA:",
+                f"ATM Strike: {atm_strike:.0f} | ATM IV: {atm_iv:.1f}%",
+                f"Put/Call Ratio: {market_context.get('put_call_ratio', 1.0):.2f} (from live chain)",
+            ]
+            for c in calls[:3]:
+                lines.append(
+                    f"  {c['strike']:.0f}C bid/ask ${c['bid']:.2f}/${c['ask']:.2f} "
+                    f"delta={c['delta']:.2f} IV={c['iv']:.1f}%"
+                )
+            for p in puts[:3]:
+                lines.append(
+                    f"  {p['strike']:.0f}P bid/ask ${p['bid']:.2f}/${p['ask']:.2f} "
+                    f"delta={p['delta']:.2f} IV={p['iv']:.1f}%"
+                )
+            options_str = "\n".join(lines)
 
         peers_str = ""
         if peers_votes and round_num > 1:
@@ -84,6 +110,7 @@ Regime: {market_context.get('market_regime', 'unknown')}
 
 MARKET DATA (Round {round_num}):
 {market_str}
+{options_str}
 {peers_str}
 {prior_str}
 {memory_context}

@@ -22,6 +22,32 @@ class ReportGenerator:
         else:
             self.client = None
 
+    def _build_options_section(self, market_context: dict) -> str:
+        """Build OPTIONS DATA section for the synthesis prompt."""
+        chain = market_context.get("options_chain")
+        if not chain:
+            return ""
+        atm_strike = market_context.get("atm_strike", 0)
+        atm_iv = market_context.get("atm_iv", 0)
+        pcr = market_context.get("put_call_ratio", 1.0)
+        lines = [
+            "OPTIONS DATA:",
+            f"ATM Strike: {atm_strike:.0f} | ATM IV: {atm_iv:.1f}% | Put/Call Ratio: {pcr:.2f}",
+        ]
+        calls = [c for c in chain if c["type"] == "call"][:3]
+        puts = [c for c in chain if c["type"] == "put"][:3]
+        for c in calls:
+            lines.append(
+                f"  {c['strike']:.0f}C ${c['bid']:.2f}/${c['ask']:.2f} "
+                f"delta={c['delta']:.2f} IV={c['iv']:.1f}%"
+            )
+        for p in puts:
+            lines.append(
+                f"  {p['strike']:.0f}P ${p['bid']:.2f}/${p['ask']:.2f} "
+                f"delta={p['delta']:.2f} IV={p['iv']:.1f}%"
+            )
+        return "\n".join(lines)
+
     async def generate(self, consensus: dict, market_context: dict, aoms_memories: list[dict] = None) -> dict:
         """Generate a structured trade card from swarm consensus."""
         memories_str = ""
@@ -48,14 +74,21 @@ MARKET STATE:
 BULL CASE: {consensus.get('strongest_bull', 'N/A')}
 BEAR CASE: {consensus.get('strongest_bear', 'N/A')}
 
+{self._build_options_section(market_context)}
 {memories_str}
 
 Based on this swarm signal, provide a SPECIFIC 0DTE trade recommendation. Be direct and actionable.
+If options data is available, recommend a specific strike with Greeks.
 
 Respond with ONLY valid JSON:
 {{
   "action": "BUY" or "SELL" or "WAIT",
   "instrument": "e.g. SPX 5820C 0DTE",
+  "strike": <float or null>,
+  "premium_bid": <float or null>,
+  "premium_ask": <float or null>,
+  "delta": <float or null>,
+  "implied_vol": <float or null>,
   "entry_price_est": <float or null>,
   "target_price": <float or null>,
   "stop_price": <float or null>,
@@ -94,6 +127,11 @@ Respond with ONLY valid JSON:
                 "herding_warning": consensus.get("herding_detected", False),
                 "action": trade_data.get("action", "WAIT"),
                 "instrument": trade_data.get("instrument", "N/A"),
+                "strike": trade_data.get("strike"),
+                "premium_bid": trade_data.get("premium_bid"),
+                "premium_ask": trade_data.get("premium_ask"),
+                "delta": trade_data.get("delta"),
+                "implied_vol": trade_data.get("implied_vol"),
                 "entry_price_est": trade_data.get("entry_price_est"),
                 "target_price": trade_data.get("target_price"),
                 "stop_price": trade_data.get("stop_price"),

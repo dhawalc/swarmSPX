@@ -77,6 +77,27 @@ def format_trade_card(card: dict) -> dict:
             }
         )
 
+    # Greeks section (from Tradier options data)
+    strike = card.get("strike")
+    delta = card.get("delta")
+    if strike is not None and delta is not None:
+        greeks_fields = [
+            {"type": "mrkdwn", "text": f"*Strike:* {strike:.0f}"},
+            {"type": "mrkdwn", "text": f"*Delta:* {delta:.2f}"},
+        ]
+        premium_bid = card.get("premium_bid")
+        premium_ask = card.get("premium_ask")
+        if premium_bid is not None and premium_ask is not None:
+            greeks_fields.append(
+                {"type": "mrkdwn", "text": f"*Premium:* ${premium_bid:.2f}/${premium_ask:.2f}"}
+            )
+        implied_vol = card.get("implied_vol")
+        if implied_vol is not None:
+            greeks_fields.append(
+                {"type": "mrkdwn", "text": f"*IV:* {implied_vol:.1f}%"}
+            )
+        blocks.append({"type": "section", "fields": greeks_fields})
+
     if rationale:
         blocks.append(
             {
@@ -118,6 +139,48 @@ def format_trade_card(card: dict) -> dict:
             {
                 "color": _color_for_direction(direction),
                 "blocks": blocks,
+            }
+        ]
+    }
+
+
+def format_outcome(event) -> dict:
+    """Build a Slack Block Kit payload for an outcome resolution."""
+    outcome = event.outcome.upper()
+    pct = event.outcome_pct
+    direction = event.direction
+
+    if outcome == "WIN":
+        emoji = ":white_check_mark:"
+        color = "#2ecc71"
+    elif outcome == "LOSS":
+        emoji = ":x:"
+        color = "#e74c3c"
+    else:
+        emoji = ":heavy_minus_sign:"
+        color = "#f1c40f"
+
+    return {
+        "attachments": [
+            {
+                "color": color,
+                "blocks": [
+                    {
+                        "type": "header",
+                        "text": {
+                            "type": "plain_text",
+                            "text": f"{emoji} Signal Resolved: {outcome} {pct:+.2f}%",
+                        },
+                    },
+                    {
+                        "type": "section",
+                        "fields": [
+                            {"type": "mrkdwn", "text": f"*Direction:* {direction}"},
+                            {"type": "mrkdwn", "text": f"*P&L:* {pct:+.2f}%"},
+                            {"type": "mrkdwn", "text": f"*Signal:* #{event.signal_id}"},
+                        ],
+                    },
+                ],
             }
         ]
     }

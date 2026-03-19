@@ -37,6 +37,38 @@ def create_router(state: CycleState, engine: Any) -> APIRouter:
         except FileNotFoundError:
             raise HTTPException(status_code=404, detail="agents.yaml not found")
 
+    @router.get("/signals")
+    async def signals() -> dict:
+        """Return recent signals with outcomes."""
+        return {"signals": engine.db.get_recent_signals(limit=20)}
+
+    @router.get("/stats")
+    async def stats() -> dict:
+        """Return aggregate signal statistics."""
+        return engine.db.get_signal_stats()
+
+    @router.get("/agents/custom")
+    async def list_custom_agents() -> dict:
+        """Return currently loaded custom agents."""
+        return {"agents": engine.forge.get_custom_agents()}
+
+    @router.post("/agents/custom")
+    async def add_custom_agent(body: dict) -> dict:
+        """Add a new custom agent to the swarm."""
+        try:
+            added = engine.forge.add_custom_agent(body)
+            return {"status": "added", "agent": added}
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=str(e))
+
+    @router.delete("/agents/custom/{agent_id}")
+    async def delete_custom_agent(agent_id: str) -> dict:
+        """Remove a custom agent from the swarm."""
+        removed = engine.forge.remove_custom_agent(agent_id)
+        if not removed:
+            raise HTTPException(status_code=404, detail=f"Custom agent '{agent_id}' not found")
+        return {"status": "removed", "agent_id": agent_id}
+
     @router.post("/cycle/trigger")
     async def trigger_cycle() -> dict:
         """Trigger a new simulation cycle (non-blocking)."""

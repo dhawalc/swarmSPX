@@ -1,0 +1,29 @@
+# Custom agents — add your own personas to the swarm.
+# Each agent joins a tribe for model routing (see config/settings.yaml tribe_models).
+# Unknown tribes fall back to fast_local (llama3.1:8b).
+# Max 6 custom agents (30 total cap including the base 24).
+#
+# Example:
+#
+# agents:
+#   - id: elliott_emma
+#     name: "Elliott Emma"
+#     tribe: technical
+#     specialty: "elliott_wave"
+#     bias: "wave_counter"
+#     persona: >
+#       You are an Elliott Wave analyst. You count waves obsessively and believe
+#       markets move in predictable 5-wave impulse and 3-wave corrective patterns.
+#       You always know what wave you're in and where the next target is.
+#
+#   - id: crypto_chris
+#     name: "Crypto Chris"
+#     tribe: macro
+#     specialty: "crypto_correlation"
+#     bias: "risk_on_proxy"
+#     persona: >
+#       You track Bitcoin and crypto markets as a risk appetite proxy.
+#       When BTC breaks out, equities follow. When crypto dumps, risk-off is coming.
+#       You believe digital assets lead traditional markets by 4-6 hours.
+
+agents: []

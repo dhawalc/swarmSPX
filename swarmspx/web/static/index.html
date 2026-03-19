@@ -138,7 +138,32 @@
     </div>
   </section>
 
-  <!-- BOTTOM: Activity Log -->
+  <!-- BOTTOM-LEFT: Signal History -->
+  <section id="panel-signals" class="card">
+    <div class="card-header">
+      <span class="card-header-icon">&#128200;</span> Signal History
+      <span class="card-header-stat" id="signals-stat"></span>
+    </div>
+    <div id="signals-table-wrap">
+      <table class="signals-table" id="signals-table">
+        <thead>
+          <tr>
+            <th>Time</th>
+            <th>Dir</th>
+            <th>Conf</th>
+            <th>Entry</th>
+            <th>Outcome</th>
+            <th>P&amp;L</th>
+          </tr>
+        </thead>
+        <tbody id="signals-tbody">
+          <tr><td colspan="6" class="dim mono" style="text-align:center;">No signals yet</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- BOTTOM-RIGHT: Activity Log -->
   <section id="panel-bottom" class="card">
     <div class="card-header">
       <span class="card-header-icon">&#9656;</span> Activity Log

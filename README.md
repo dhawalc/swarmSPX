@@ -79,7 +79,7 @@ Live Market Data (SPX, VIX, VWAP)
 | Retail Ray | Fade retail flow patterns |
 | Whale Wanda | Large block & institutional detection |
 
-### Strategist Tribe (Claude Sonnet powered)
+### Strategist Tribe (Phi-4 14B)
 | Agent | Strategy |
 |-------|----------|
 | Calendar Cal | Time decay & expiry dynamics |
@@ -119,19 +119,30 @@ python -m swarmspx.cli web --port 8420
 ## Architecture
 
 - **Python 3.12** + asyncio for concurrent agent execution
-- **Ollama** (local) — 18 agents on Llama 3.1 8B
-- **Claude Sonnet** (via CLI) — 6 strategist agents with deeper reasoning
+- **Ollama** (local) — 18 agents on Llama 3.1 8B, 6 strategists on Phi-4 14B
 - **FastAPI + WebSocket** — real-time event streaming to browser
 - **Vanilla Canvas/JS** — neural network visualization, zero framework dependencies
-- **DuckDB** — local storage for snapshots and simulation results
+- **DuckDB** — local storage for snapshots, signals, and outcomes
 - **Textual** — alternative full-screen terminal UI
 - **EventBus** — decoupled pub-sub architecture connecting engine to any UI
+- **Tradier API** — live SPX options chains with Greeks (optional)
+
+## Features
+
+### Live Options Data (v1.1)
+Add `TRADIER_API_KEY` to `.env` to get real SPX options chains. Agents see live bid/ask, delta, IV, and put/call ratio. Trade cards include specific strike recommendations with Greeks. Works without the key — falls back to yfinance-only data.
+
+### Outcome Tracking (v1.2)
+Every signal is tracked with entry SPX price. After 2 hours or EOD, outcomes resolve as WIN/LOSS/SCRATCH with P&L. Results feed back into AOMS memory so the swarm learns from its history. View signal history in the dashboard or via `GET /api/signals`.
+
+### Custom Agents (v3.0-lite)
+Define your own agent personas in `config/custom_agents.yaml`. Up to 6 custom agents merge into the swarm alongside the base 24. Manage via REST API: `POST /api/agents/custom` to add, `DELETE /api/agents/custom/{id}` to remove.
 
 ## Alerts
 
 Configure in `.env`:
-- **Telegram** — bot sends trade cards when confidence > 70%
-- **Slack** — webhook posts with Block Kit formatting
+- **Telegram** — bot sends trade cards with Greeks when confidence > 70%
+- **Slack** — webhook posts with Block Kit formatting + options data
 
 ## Inspiration
 

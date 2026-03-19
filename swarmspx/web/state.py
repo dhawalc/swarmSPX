@@ -125,6 +125,17 @@ class CycleState:
     def _on_cycle_completed(self, d: dict) -> None:
         self._state["status"] = "idle"
 
+    def _on_outcome_resolved(self, d: dict) -> None:
+        outcomes = self._state.setdefault("recent_outcomes", [])
+        outcomes.insert(0, {
+            "signal_id": d.get("signal_id"),
+            "direction": d.get("direction"),
+            "outcome": d.get("outcome"),
+            "outcome_pct": d.get("outcome_pct"),
+        })
+        # Keep last 10 outcomes in memory
+        self._state["recent_outcomes"] = outcomes[:10]
+
     def _on_engine_error(self, d: dict) -> None:
         self._state["error"] = d.get("message")
         self._state["status"] = "error"

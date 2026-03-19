@@ -13,7 +13,9 @@ from swarmspx.events import (
     EventBus, NoOpBus,
     CycleStarted, MarketDataFetched, ConsensusReached,
     TradeCardGenerated, CycleCompleted, EngineError,
+    OutcomeResolved,
 )
+from swarmspx.tracking.outcome_tracker import OutcomeTracker
 
 class SwarmSPXEngine:
     """Main orchestrator for the full simulation pipeline."""
@@ -45,6 +47,7 @@ class SwarmSPXEngine:
         )
         self.db = Database(self.settings["database"]["path"])
         self.db.init_schema()
+        self.tracker = OutcomeTracker(self.db, self.fetcher, self.memory, self.bus)
 
     async def run_cycle(self) -> dict:
         """Run one full simulation cycle."""
@@ -57,6 +60,9 @@ class SwarmSPXEngine:
         if not market_context.get("spx_price"):
             await self.bus.emit(EngineError(message="Market data unavailable"))
             return {}
+
+        # 1b. Enrich with live options chain (if Tradier configured)
+        await self.fetcher.enrich_with_options(market_context)
 
         await self.bus.emit(MarketDataFetched(market_context=market_context))
 
@@ -78,7 +84,7 @@ class SwarmSPXEngine:
         await self.bus.emit(TradeCardGenerated(trade_card=trade_card))
 
         # 6. Store to AOMS
-        self.memory.store_result(
+        memory_id = self.memory.store_result(
             direction=consensus["direction"],
             confidence=consensus["confidence"],
             trade_setup=trade_card,
@@ -87,13 +93,18 @@ class SwarmSPXEngine:
         )
 
         # 7. Store to DuckDB
-        self.db.store_simulation_result({
+        signal_id = self.db.store_simulation_result({
             "direction": consensus["direction"],
             "confidence": consensus["confidence"],
             "agreement_pct": consensus["agreement_pct"],
+            "spx_entry_price": market_context.get("spx_price", 0.0),
+            "memory_id": memory_id,
             "trade_setup": trade_card,
             "agent_votes": consensus.get("vote_counts", {}),
         })
+
+        # 8. Check and resolve pending signals
+        await self.tracker.check_pending_signals()
 
         duration = time.time() - start
         await self.bus.emit(CycleCompleted(cycle_id=self.cycle_count, duration_sec=duration))

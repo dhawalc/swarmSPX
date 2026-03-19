@@ -78,6 +78,15 @@ class CycleCompleted(Event):
 
 
 @dataclass
+class OutcomeResolved(Event):
+    event_type: str = "outcome_resolved"
+    signal_id: int = 0
+    direction: str = ""
+    outcome: str = ""
+    outcome_pct: float = 0.0
+
+
+@dataclass
 class EngineError(Event):
     event_type: str = "engine_error"
     message: str = ""
