@@ -707,3 +707,185 @@ class TestWeightedConsensus:
         for agent_id in result["top_weighted_agents"]:
             vote_dir = next(v.direction for v in votes if v.agent_id == agent_id)
             assert vote_dir == "BULL"
+
+
+# ── DB Layer ──────────────────────────────────────────────────────────────────
+
+@pytest.fixture
+def mem_db():
+    d = Database(":memory:")
+    d.init_schema()
+    return d
+
+
+class TestDBAgentVotes:
+
+    def test_store_and_retrieve_agent_votes(self, mem_db):
+        votes = [{"agent_id": "vwap_victor", "direction": "BULL", "conviction": 80},
+                 {"agent_id": "gamma_gary", "direction": "BEAR", "conviction": 60}]
+        mem_db.store_agent_votes(signal_id=1, votes=votes, regime="normal_vol")
+        rows = mem_db.get_agent_votes_for_signal(signal_id=1)
+        assert len(rows) == 2
+
+    def test_get_agent_votes_for_signal(self, mem_db):
+        mem_db.store_agent_votes(
+            1, [{"agent_id": "vwap_victor", "direction": "BULL", "conviction": 80}], "normal_vol")
+        mem_db.store_agent_votes(
+            2, [{"agent_id": "gamma_gary", "direction": "BEAR", "conviction": 70}], "elevated_vol")
+        rows_1 = mem_db.get_agent_votes_for_signal(1)
+        rows_2 = mem_db.get_agent_votes_for_signal(2)
+        assert all(r["signal_id"] == 1 for r in rows_1)
+        assert all(r["signal_id"] == 2 for r in rows_2)
+        assert rows_1[0]["agent_id"] == "vwap_victor"
+        assert rows_2[0]["agent_id"] == "gamma_gary"
+
+    def test_vote_fields_stored_correctly(self, mem_db):
+        votes = [{"agent_id": "delta_dawn", "direction": "NEUTRAL", "conviction": 55}]
+        mem_db.store_agent_votes(signal_id=10, votes=votes, regime="high_vol_panic")
+        rows = mem_db.get_agent_votes_for_signal(10)
+        assert rows[0]["direction"] == "NEUTRAL"
+        assert rows[0]["conviction"] == 55
+        assert rows[0]["regime"] == "high_vol_panic"
+
+
+class TestDBAgentScores:
+
+    def test_upsert_agent_score_insert(self, mem_db):
+        mem_db.upsert_agent_score("vwap_victor", "normal_vol", 1050.0, 10, 5, 15)
+        rows = mem_db.get_agent_scores(regime="normal_vol")
+        assert any(r["agent_id"] == "vwap_victor" for r in rows)
+
+    def test_upsert_agent_score_update(self, mem_db):
+        mem_db.upsert_agent_score("gamma_gary", "elevated_vol", 1050.0, 10, 5, 15)
+        mem_db.upsert_agent_score("gamma_gary", "elevated_vol", 1100.0, 15, 5, 20)
+        rows = mem_db.get_agent_scores(regime="elevated_vol")
+        gary_rows = [r for r in rows if r["agent_id"] == "gamma_gary"]
+        assert len(gary_rows) == 1
+        assert gary_rows[0]["elo_rating"] == 1100.0
+        assert gary_rows[0]["total_signals"] == 20
+
+    def test_get_agent_scores_by_regime(self, mem_db):
+        mem_db.upsert_agent_score("vwap_victor", "normal_vol", 1050.0, 5, 2, 7)
+        mem_db.upsert_agent_score("gamma_gary", "elevated_vol", 1030.0, 3, 1, 4)
+        rows = mem_db.get_agent_scores(regime="normal_vol")
+        assert all(r["regime"] == "normal_vol" for r in rows)
+        ids = {r["agent_id"] for r in rows}
+        assert "vwap_victor" in ids and "gamma_gary" not in ids
+
+    def test_get_agent_scores_all_regimes(self, mem_db):
+        mem_db.upsert_agent_score("vwap_victor", "normal_vol", 1050.0, 5, 2, 7)
+        mem_db.upsert_agent_score("gamma_gary", "elevated_vol", 1030.0, 3, 1, 4)
+        rows = mem_db.get_agent_scores()
+        regimes_found = {r["regime"] for r in rows}
+        assert "normal_vol" in regimes_found and "elevated_vol" in regimes_found
+
+
+class TestDBAgentVoteHistory:
+
+    def test_get_agent_vote_history_with_outcomes(self, mem_db):
+        sig_id = mem_db.store_simulation_result({
+            "direction": "BULL", "confidence": 75.0, "agreement_pct": 80.0,
+            "spx_entry_price": 5800.0, "memory_id": "mem_001",
+            "trade_setup": {}, "agent_votes": {},
+        })
+        mem_db.update_outcome(sig_id, "win", 1.5)
+        mem_db.store_agent_votes(
+            sig_id, [{"agent_id": "vwap_victor", "direction": "BULL", "conviction": 85}],
+            regime="normal_vol")
+        history = mem_db.get_agent_vote_history("vwap_victor", limit=10)
+        assert len(history) >= 1
+        row = history[0]
+        assert row["agent_id"] == "vwap_victor"
+        assert row["outcome"] == "win"
+        assert abs(row["outcome_pct"] - 1.5) < 0.01
+
+    def test_vote_history_agent_isolation(self, mem_db):
+        mem_db.store_agent_votes(
+            1,
+            [{"agent_id": "vwap_victor", "direction": "BULL", "conviction": 80},
+             {"agent_id": "gamma_gary", "direction": "BEAR", "conviction": 70}],
+            "normal_vol")
+        history = mem_db.get_agent_vote_history("gamma_gary", limit=10)
+        assert all(r["agent_id"] == "gamma_gary" for r in history)
+
+    def test_vote_history_empty_for_unknown_agent(self, mem_db):
+        history = mem_db.get_agent_vote_history("no_such_agent_xyz", limit=10)
+        assert history == []
+
+
+# ── Backtesting ───────────────────────────────────────────────────────────────
+
+class TestBacktestEngine:
+
+    def setup_method(self):
+        self.engine = BacktestEngine(seed=42)
+
+    def test_backtest_runs_without_error(self):
+        result = self.engine.run(num_signals=50, warmup_signals=10)
+        assert result is not None
+        assert result.total_signals == 50
+
+    def test_backtest_result_fields_present(self):
+        result = self.engine.run(num_signals=50, warmup_signals=10)
+        assert isinstance(result.equal_weight_wins, int)
+        assert isinstance(result.weighted_win_rate, float)
+        assert isinstance(result.improvement_pct, float)
+        assert isinstance(result.agent_leaderboard, list)
+        assert isinstance(result.regime_breakdown, dict)
+
+    def test_backtest_weighted_beats_equal(self):
+        result = self.engine.run(num_signals=500, warmup_signals=30)
+        assert result.improvement_pct >= -2.0
+
+    def test_backtest_win_rates_sum_to_total(self):
+        result = self.engine.run(num_signals=100, warmup_signals=20)
+        assert result.equal_weight_wins + result.equal_weight_losses == result.total_signals
+        assert result.weighted_wins + result.weighted_losses == result.total_signals
+
+    def test_backtest_regime_breakdown_has_all_regimes(self):
+        result = self.engine.run(num_signals=200, warmup_signals=20)
+        for regime in REGIMES:
+            assert regime in result.regime_breakdown
+
+    def test_backtest_agent_leaderboard_has_all_agents(self):
+        result = self.engine.run(num_signals=100, warmup_signals=10)
+        leaderboard_ids = {a["agent_id"] for a in result.agent_leaderboard}
+        assert leaderboard_ids == set(AGENT_IDS)
+
+    def test_backtest_leaderboard_sorted_descending(self):
+        result = self.engine.run(num_signals=100, warmup_signals=10)
+        elos = [a["avg_elo"] for a in result.agent_leaderboard]
+        assert elos == sorted(elos, reverse=True)
+
+    def test_backtest_convergence_within_100_signals(self):
+        result = self.engine.run(num_signals=500, warmup_signals=30)
+        assert result.signals_needed_for_convergence <= 200
+
+    def test_backtest_monte_carlo_positive(self):
+        mc = self.engine.run_monte_carlo(num_trials=10, signals_per_trial=100)
+        assert mc["mean_improvement"] >= -2.0
+        assert mc["trials"] == 10
+        assert "pct_trials_improved" in mc
+        assert "mean_convergence_signal" in mc
+
+    def test_backtest_regime_breakdown_win_rates_bounded(self):
+        result = self.engine.run(num_signals=200, warmup_signals=20)
+        for regime, data in result.regime_breakdown.items():
+            assert 0.0 <= data["equal_win_rate"] <= 100.0
+            assert 0.0 <= data["weighted_win_rate"] <= 100.0
+
+    def test_generate_signal_votes_cover_all_agents(self):
+        signal = self.engine.generate_signal(signal_id=0, regime="normal_vol")
+        vote_agent_ids = {v["agent_id"] for v in signal.agent_votes}
+        assert vote_agent_ids == set(AGENT_IDS)
+
+    def test_compute_weights_sums_to_one(self):
+        elo_scores = {aid: 1000.0 + (i * 10) for i, aid in enumerate(AGENT_IDS)}
+        weights = self.engine.compute_weights(elo_scores)
+        assert abs(sum(weights.values()) - 1.0) < 1e-6
+
+    def test_compute_weights_floor_applied(self):
+        elo_scores = {aid: (1500.0 if i == 0 else 500.0) for i, aid in enumerate(AGENT_IDS)}
+        weights = self.engine.compute_weights(elo_scores)
+        for aid, w in weights.items():
+            assert w >= 0.0, f"{aid} weight is negative: {w}"
