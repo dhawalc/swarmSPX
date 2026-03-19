@@ -25,6 +25,11 @@ class OptionContract:
     iv: float  # implied volatility
 
     @classmethod
+    def from_raw(cls, raw: dict) -> OptionContract:
+        """Parse any normalized option dict (works for both Tradier and Schwab)."""
+        return cls.from_tradier(raw)
+
+    @classmethod
     def from_tradier(cls, raw: dict) -> OptionContract:
         """Parse a Tradier API option dict into an OptionContract."""
         greeks = raw.get("greeks") or {}
