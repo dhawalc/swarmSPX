@@ -46,6 +46,15 @@ class Database:
         self.conn.execute("""
             CREATE SEQUENCE IF NOT EXISTS simulation_results_id_seq
         """)
+        # Migrate old schemas: add columns if missing
+        try:
+            self.conn.execute("SELECT spx_entry_price FROM simulation_results LIMIT 0")
+        except Exception:
+            self.conn.execute("ALTER TABLE simulation_results ADD COLUMN spx_entry_price DOUBLE DEFAULT 0.0")
+        try:
+            self.conn.execute("SELECT memory_id FROM simulation_results LIMIT 0")
+        except Exception:
+            self.conn.execute("ALTER TABLE simulation_results ADD COLUMN memory_id VARCHAR DEFAULT ''")
 
     def store_snapshot(self, snapshot: dict):
         self.conn.execute("""
