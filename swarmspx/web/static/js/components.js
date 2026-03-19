@@ -116,6 +116,60 @@ const TradeCard = {
     `;
   },
 
+  _renderStrategy(tc) {
+    const strat = tc.selected_strategy;
+    if (!strat || !strat.trade) return "";
+    const s = strat.strategy;
+    const t = strat.trade;
+    const reason = strat.reason || "";
+
+    const badge = s === "LOTTO" ? "lotto" : s === "IRON_CONDOR" ? "condor" : s === "VERTICAL" ? "vertical" : "straight";
+
+    let legsHtml = "";
+    if (t.legs) {
+      legsHtml = t.legs.map(l =>
+        `<div class="tc-leg ${l.action === "BUY" ? "buy" : "sell"}">
+          <span class="tc-leg-action">${_esc(l.action)}</span>
+          <span class="tc-leg-strike mono">${parseFloat(l.strike).toFixed(0)}${l.option_type === "call" ? "C" : "P"}</span>
+          <span class="tc-leg-price mono">$${parseFloat(l.premium_ask || l.premium_bid || 0).toFixed(2)}</span>
+          <span class="tc-leg-delta mono dim">\u0394${parseFloat(l.delta || 0).toFixed(2)}</span>
+        </div>`
+      ).join("");
+    }
+
+    let metricsHtml = "";
+    if (s === "VERTICAL") {
+      metricsHtml = `
+        <div class="tc-strat-metrics">
+          <span>Debit: <b class="bear">$${parseFloat(t.net_debit).toFixed(2)}</b></span>
+          <span>Max Gain: <b class="bull">$${parseFloat(t.max_gain).toFixed(2)}</b></span>
+          <span>R:R <b class="accent">${t.rr_ratio}:1</b></span>
+        </div>`;
+    } else if (s === "IRON_CONDOR") {
+      metricsHtml = `
+        <div class="tc-strat-metrics">
+          <span>Credit: <b class="bull">$${parseFloat(t.net_credit).toFixed(2)}</b></span>
+          <span>Max Risk: <b class="bear">$${parseFloat(t.max_loss).toFixed(2)}</b></span>
+          <span>BE: <b class="accent">${parseFloat(t.breakeven_low).toFixed(0)}-${parseFloat(t.breakeven_high).toFixed(0)}</b></span>
+        </div>`;
+    } else if (t.target_premium) {
+      metricsHtml = `
+        <div class="tc-strat-metrics">
+          <span>Entry: <b class="accent">$${parseFloat(t.premium_ask).toFixed(2)}</b></span>
+          <span>Target: <b class="bull">$${parseFloat(t.target_premium).toFixed(2)}</b></span>
+          <span>R:R <b class="accent">${(t.target_premium / t.premium_ask).toFixed(1)}:1</b></span>
+        </div>`;
+    }
+
+    return `
+      <div class="tc-strategy">
+        <span class="tc-strat-badge ${badge}">${_esc(s)}</span>
+        <span class="tc-strat-reason dim">${_esc(reason)}</span>
+        ${legsHtml ? `<div class="tc-legs">${legsHtml}</div>` : ""}
+        ${metricsHtml}
+      </div>`;
+  },
+
   render(tc) {
     if (!tc) return;
     const el = document.getElementById("trade-card");
@@ -147,6 +201,7 @@ const TradeCard = {
           </div>
         </div>
         <div class="tc-instrument">${_esc(tc.instrument || "SPX 0DTE")}</div>
+        ${this._renderStrategy(tc)}
         <div class="tc-price-ladder">
           <div class="tc-price-level target">
             <span class="tc-price-tag bull">TARGET</span>

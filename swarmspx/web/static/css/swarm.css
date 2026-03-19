@@ -1218,6 +1218,70 @@ body.cinematic-mode .cinematic-overlay {
   color: var(--text-dim);
 }
 
+/* --- Strategy in Trade Card ------------------------------ */
+.tc-strategy {
+  margin: 10px 0;
+  padding: 10px 12px;
+  background: rgba(6, 6, 16, 0.5);
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+}
+.tc-strat-badge {
+  display: inline-block;
+  padding: 2px 10px;
+  border-radius: 3px;
+  font-size: .62rem;
+  font-weight: 700;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+  margin-right: 8px;
+}
+.tc-strat-badge.straight { background: var(--accent-dim); color: var(--accent); border: 1px solid rgba(64,196,255,0.2); }
+.tc-strat-badge.vertical { background: var(--bull-dim); color: var(--bull); border: 1px solid rgba(0,230,118,0.2); }
+.tc-strat-badge.condor   { background: var(--warn-dim); color: var(--warn); border: 1px solid rgba(255,214,0,0.2); }
+.tc-strat-badge.lotto    { background: rgba(171,71,188,0.12); color: #ab47bc; border: 1px solid rgba(171,71,188,0.2); }
+.tc-strat-reason {
+  font-size: .68rem;
+  font-family: var(--font-sans);
+  line-height: 1.4;
+}
+.tc-legs {
+  margin-top: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.tc-leg {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  font-size: .72rem;
+  padding: 3px 8px;
+  border-radius: 3px;
+}
+.tc-leg.buy  { background: var(--bull-dim); border-left: 2px solid var(--bull); }
+.tc-leg.sell { background: var(--bear-dim); border-left: 2px solid var(--bear); }
+.tc-leg-action {
+  font-weight: 700;
+  font-size: .6rem;
+  letter-spacing: .06em;
+  min-width: 30px;
+}
+.tc-leg.buy .tc-leg-action { color: var(--bull); }
+.tc-leg.sell .tc-leg-action { color: var(--bear); }
+.tc-leg-strike { font-weight: 600; }
+.tc-leg-price { color: var(--text-dim); }
+.tc-leg-delta { font-size: .6rem; }
+.tc-strat-metrics {
+  display: flex;
+  gap: 14px;
+  flex-wrap: wrap;
+  margin-top: 8px;
+  font-size: .7rem;
+  font-family: var(--font-mono);
+}
+.tc-strat-metrics b { font-weight: 700; }
+
 /* --- Greeks in Trade Card -------------------------------- */
 .tc-greeks {
   display: flex;

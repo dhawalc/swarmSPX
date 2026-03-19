@@ -22,6 +22,51 @@ class ReportGenerator:
         else:
             self.client = None
 
+    def _build_strategy_section(self, consensus: dict, market_context: dict) -> str:
+        """Build STRATEGY section showing the pre-selected trade structure."""
+        strategy = market_context.get("selected_strategy")
+        if not strategy:
+            return ""
+
+        strat_type = strategy.get("strategy", "WAIT")
+        reason = strategy.get("reason", "")
+        trade = strategy.get("trade")
+
+        lines = [f"PRE-SELECTED STRATEGY: {strat_type}", f"Reason: {reason}"]
+
+        if trade and strat_type in ("STRAIGHT", "LOTTO"):
+            lines.append(
+                f"Strike: {trade['strike']:.0f} {trade['option_type'].upper()} "
+                f"@ ${trade['premium_ask']:.2f} ask | delta={trade['delta']:.2f}"
+            )
+            if trade.get("target_premium"):
+                lines.append(f"Target: ${trade['target_premium']:.2f} (3x+)")
+
+        elif trade and strat_type == "VERTICAL":
+            for leg in trade.get("legs", []):
+                lines.append(
+                    f"  {leg['action']} {leg['strike']:.0f}{leg['option_type'][0].upper()} "
+                    f"@ ${leg['premium_ask']:.2f}"
+                )
+            lines.append(
+                f"Net Debit: ${trade['net_debit']:.2f} | "
+                f"Max Gain: ${trade['max_gain']:.2f} | R:R {trade['rr_ratio']}:1"
+            )
+
+        elif trade and strat_type == "IRON_CONDOR":
+            for leg in trade.get("legs", []):
+                lines.append(
+                    f"  {leg['action']} {leg['strike']:.0f}{leg['option_type'][0].upper()} "
+                    f"@ ${leg.get('premium_bid', leg.get('premium_ask', 0)):.2f}"
+                )
+            lines.append(
+                f"Net Credit: ${trade['net_credit']:.2f} | "
+                f"Max Risk: ${trade['max_loss']:.2f} | "
+                f"Breakevens: {trade.get('breakeven_low', 0):.0f}-{trade.get('breakeven_high', 0):.0f}"
+            )
+
+        return "\n".join(lines)
+
     def _build_options_section(self, market_context: dict) -> str:
         """Build OPTIONS DATA section for the synthesis prompt."""
         chain = market_context.get("options_chain")
@@ -77,13 +122,15 @@ BEAR CASE: {consensus.get('strongest_bear', 'N/A')}
 {self._build_options_section(market_context)}
 {memories_str}
 
-Based on this swarm signal, provide a SPECIFIC 0DTE trade recommendation. Be direct and actionable.
-If options data is available, recommend a specific strike with Greeks.
+{self._build_strategy_section(consensus, market_context)}
+
+Based on this swarm signal AND the pre-selected strategy, provide a SPECIFIC 0DTE trade recommendation. Be direct and actionable.
+The strategy selector has already chosen the optimal structure — provide your thesis for WHY this setup works right now.
 
 Respond with ONLY valid JSON:
 {{
   "action": "BUY" or "SELL" or "WAIT",
-  "instrument": "e.g. SPX 5820C 0DTE",
+  "instrument": "e.g. SPX 5820P 0DTE or BUY 5820P/SELL 5800P vertical",
   "strike": <float or null>,
   "premium_bid": <float or null>,
   "premium_ask": <float or null>,
@@ -144,6 +191,7 @@ Respond with ONLY valid JSON:
                 "market_regime": market_context.get("market_regime", ""),
                 "spx_price": market_context.get("spx_price", 0),
                 "vix_level": market_context.get("vix_level", 0),
+                "selected_strategy": market_context.get("selected_strategy"),
             }
         except Exception as e:
             return {

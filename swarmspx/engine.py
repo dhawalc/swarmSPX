@@ -16,6 +16,7 @@ from swarmspx.events import (
     OutcomeResolved,
 )
 from swarmspx.tracking.outcome_tracker import OutcomeTracker
+from swarmspx.strategy.selector import select_strategy
 
 class SwarmSPXEngine:
     """Main orchestrator for the full simulation pipeline."""
@@ -73,17 +74,23 @@ class SwarmSPXEngine:
         consensus = await self.pit.run(market_context)
         await self.bus.emit(ConsensusReached(consensus=consensus))
 
-        # 4. Get AOMS memories for report context
+        # 4. Select strategy based on consensus + regime + options
+        strategy = select_strategy(
+            consensus, market_context, self.fetcher._options_snapshot,
+        )
+        market_context["selected_strategy"] = strategy
+
+        # 5. Get AOMS memories for report context
         memories = self.memory.recall(
             f"SPX {market_context['market_regime']} {consensus['direction']} trading",
             limit=5
         )
 
-        # 5. Generate trade card
+        # 6. Generate trade card
         trade_card = await self.reporter.generate(consensus, market_context, memories)
         await self.bus.emit(TradeCardGenerated(trade_card=trade_card))
 
-        # 6. Store to AOMS
+        # 7. Store to AOMS
         memory_id = self.memory.store_result(
             direction=consensus["direction"],
             confidence=consensus["confidence"],
@@ -92,7 +99,7 @@ class SwarmSPXEngine:
             agent_votes=consensus.get("vote_counts", {})
         )
 
-        # 7. Store to DuckDB
+        # 8. Store to DuckDB
         signal_id = self.db.store_simulation_result({
             "direction": consensus["direction"],
             "confidence": consensus["confidence"],
@@ -103,7 +110,7 @@ class SwarmSPXEngine:
             "agent_votes": consensus.get("vote_counts", {}),
         })
 
-        # 8. Check and resolve pending signals
+        # 9. Check and resolve pending signals
         await self.tracker.check_pending_signals()
 
         duration = time.time() - start
