@@ -28,6 +28,14 @@ def main():
     web_p.add_argument("--host", default="0.0.0.0", help="Host to bind")
     web_p.add_argument("--port", type=int, default=8420, help="Port to serve on")
 
+    # schedule: automated cron-style runs (all output to Telegram)
+    sched_p = sub.add_parser("schedule", help="Run automated daily schedule (Telegram output)")
+    sched_p.add_argument("--tz-offset", type=int, default=0,
+                         help="Hours offset from ET (0 if server is ET)")
+
+    # briefing: one-off morning briefing
+    sub.add_parser("briefing", help="Send a morning briefing to Telegram (one-off)")
+
     args = parser.parse_args()
 
     if args.command == "run":
@@ -36,6 +44,10 @@ def main():
         _run_tui(args)
     elif args.command == "web":
         _run_web(args)
+    elif args.command == "schedule":
+        _run_schedule(args)
+    elif args.command == "briefing":
+        _run_briefing(args)
     else:
         parser.print_help()
         sys.exit(1)
@@ -93,6 +105,38 @@ def _run_web(args):
     engine = SwarmSPXEngine(settings_path=args.config, bus=bus)
     app = create_app(bus=bus, engine=engine, settings_path=args.config)
     uvicorn.run(app, host=args.host, port=args.port)
+
+
+def _run_schedule(args):
+    from swarmspx.scheduler import SwarmScheduler
+    scheduler = SwarmScheduler(
+        settings_path=args.config,
+        timezone_offset=getattr(args, "tz_offset", 0),
+    )
+    print(f"SwarmSPX Scheduler starting (tz_offset={getattr(args, 'tz_offset', 0)}h from ET)...")
+    print("Schedule: 8:00 briefing, 9:35/11:30/14:00/15:45 cycles")
+    print("All output → Telegram. Press Ctrl+C to stop.")
+    asyncio.run(scheduler.run())
+
+
+def _run_briefing(args):
+    from swarmspx.ingest.market_data import MarketDataFetcher
+    from swarmspx.briefing import MorningBriefing
+
+    fetcher = MarketDataFetcher()
+    briefing = MorningBriefing(fetcher)
+
+    async def _send():
+        result = await briefing.run()
+        print("Briefing sent to Telegram:")
+        for k, v in result.items():
+            if k != "strategy_recommendation":
+                print(f"  {k}: {v}")
+            else:
+                for sk, sv in v.items():
+                    print(f"    {sk}: {sv}")
+
+    asyncio.run(_send())
 
 
 if __name__ == "__main__":

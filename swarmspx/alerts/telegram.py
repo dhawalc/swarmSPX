@@ -79,6 +79,46 @@ def format_trade_card(card: dict) -> str:
         lines.append("")
         lines.append("  \\|  ".join(greeks_parts))
 
+    # Strategy info (from strategy selector)
+    strat = card.get("selected_strategy")
+    if strat and strat.get("trade"):
+        s_type = strat.get("strategy", "")
+        s_reason = strat.get("reason", "")
+        t = strat["trade"]
+        lines.append("")
+        lines.append(f"\U0001f3af *Strategy:* {_escape_md2(s_type)}")
+
+        if t.get("legs"):
+            for leg in t["legs"]:
+                leg_str = (
+                    f"  {leg['action']} {leg['strike']:.0f}"
+                    f"{'C' if leg['option_type'] == 'call' else 'P'} "
+                    f"@ ${leg.get('premium_ask', leg.get('premium_bid', 0)):.2f}"
+                )
+                lines.append(_escape_md2(leg_str))
+        if t.get("net_debit"):
+            nd = t["net_debit"]
+            mg = t["max_gain"]
+            rr = t["rr_ratio"]
+            lines.append(f"  Debit: {_escape_md2(f'${nd:.2f}')} \\| "
+                         f"Max Gain: {_escape_md2(f'${mg:.2f}')} \\| "
+                         f"R:R {_escape_md2(f'{rr}:1')}")
+        elif t.get("net_credit"):
+            nc = t["net_credit"]
+            ml = t["max_loss"]
+            lines.append(f"  Credit: {_escape_md2(f'${nc:.2f}')} \\| "
+                         f"Max Risk: {_escape_md2(f'${ml:.2f}')}")
+        elif t.get("target_premium"):
+            pa = t["premium_ask"]
+            tp = t["target_premium"]
+            mult = tp / pa if pa > 0 else 0
+            lines.append(f"  Entry: {_escape_md2(f'${pa:.2f}')} \\| "
+                         f"Target: {_escape_md2(f'${tp:.2f}')} "
+                         f"\\({_escape_md2(f'{mult:.0f}x')}\\)")
+
+        if s_reason:
+            lines.append(f"_{_escape_md2(s_reason[:200])}_")
+
     if rationale:
         lines.append("")
         lines.append(f"_{_escape_md2(rationale)}_")
