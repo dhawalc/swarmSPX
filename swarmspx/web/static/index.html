@@ -55,8 +55,9 @@
   </div>
 
   <div class="topbar-right">
-    <button id="trigger-btn">
-      <span class="trigger-icon"></span>
+    <span class="cycle-timer" id="cycle-timer"></span>
+    <button id="trigger-btn" aria-label="Run analysis cycle">
+      <span class="trigger-icon" aria-hidden="true"></span>
       Run Cycle
     </button>
     <div id="ws-status">
@@ -66,6 +67,34 @@
   </div>
 </header>
 
+<!-- ── Stats Bar ──────────────────────────────────────────── -->
+<div id="stats-bar">
+  <div class="stat-item">
+    <span>Win Rate:</span>
+    <span class="stat-value" id="stat-winrate">--</span>
+  </div>
+  <div class="stat-item">
+    <span>Avg P&amp;L:</span>
+    <span class="stat-value" id="stat-avgpnl">--</span>
+  </div>
+  <div class="stat-item">
+    <span>Today:</span>
+    <span class="stat-value" id="stat-today">--</span>
+  </div>
+  <div class="stat-item">
+    <span>Streak:</span>
+    <span class="stat-value" id="stat-streak">--</span>
+  </div>
+  <div class="stat-item">
+    <span>PCR:</span>
+    <span class="stat-value" id="stat-pcr">--</span>
+  </div>
+  <div class="stat-item">
+    <span>ATM IV:</span>
+    <span class="stat-value" id="stat-atmiv">--</span>
+  </div>
+</div>
+
 <!-- ── Dashboard Grid ──────────────────────────────────────── -->
 <main id="dashboard">
 
@@ -74,7 +103,7 @@
     <div class="card-header">
       <span class="card-header-icon">&#9673;</span> Agent Network
       <span class="card-header-stat" id="network-stat"></span>
-      <button id="cinematic-btn" class="cinematic-btn" title="Cinematic Mode (F)">&#x26F6;</button>
+      <button id="cinematic-btn" class="cinematic-btn" title="Cinematic Mode (F)" aria-label="Cinematic mode (press F)">&#x26F6;</button>
     </div>
     <div id="agent-canvas-wrap">
       <canvas id="agent-canvas"></canvas>
@@ -184,6 +213,43 @@
   <div class="cinematic-bottom-center" id="cinematic-consensus">
     <span id="cin-direction">--</span>
     <span id="cin-confidence">--</span>
+  </div>
+</div>
+
+<!-- ── Toast Notifications ────────────────────────────────── -->
+<div id="toast-container"></div>
+
+<!-- ── Mobile Tab Bar ────────────────────────────────────── -->
+<nav id="mobile-tabs" aria-label="View panels">
+  <button class="tab-btn active" role="tab" aria-selected="true" data-tab="network">
+    <span class="tab-icon" aria-hidden="true">&#9673;</span>
+    Network
+  </button>
+  <button class="tab-btn" role="tab" aria-selected="false" data-tab="signal">
+    <span class="tab-icon" aria-hidden="true">&#9889;</span>
+    Signal
+  </button>
+  <button class="tab-btn" role="tab" aria-selected="false" data-tab="debate">
+    <span class="tab-icon" aria-hidden="true">&#128172;</span>
+    Debate
+  </button>
+  <button class="tab-btn" role="tab" aria-selected="false" data-tab="history">
+    <span class="tab-icon" aria-hidden="true">&#128200;</span>
+    History
+  </button>
+</nav>
+
+<!-- ── Keyboard Shortcuts Overlay ────────────────────────── -->
+<div id="shortcuts-overlay" role="dialog" aria-modal="true" aria-labelledby="shortcuts-title">
+  <div class="shortcuts-card">
+    <h3 id="shortcuts-title">Keyboard Shortcuts</h3>
+    <div class="shortcut-row"><span class="shortcut-key">C</span><span class="shortcut-desc">Run cycle</span></div>
+    <div class="shortcut-row"><span class="shortcut-key">F</span><span class="shortcut-desc">Cinematic mode</span></div>
+    <div class="shortcut-row"><span class="shortcut-key">1</span><span class="shortcut-desc">Focus network</span></div>
+    <div class="shortcut-row"><span class="shortcut-key">2</span><span class="shortcut-desc">Focus signal</span></div>
+    <div class="shortcut-row"><span class="shortcut-key">3</span><span class="shortcut-desc">Focus debate</span></div>
+    <div class="shortcut-row"><span class="shortcut-key">?</span><span class="shortcut-desc">Show shortcuts</span></div>
+    <div class="shortcut-row"><span class="shortcut-key">Esc</span><span class="shortcut-desc">Close / exit</span></div>
   </div>
 </div>
 

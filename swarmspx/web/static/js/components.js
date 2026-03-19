@@ -107,9 +107,11 @@ const TradeCard = {
       <div class="card-header">
         <span class="card-header-icon">&#9889;</span> Trade Signal
       </div>
-      <div class="tc-waiting">
-        <div class="tc-scan-text">SCANNING...</div>
-        <div class="tc-scan-bar"></div>
+      <div style="padding:18px;">
+        <div class="skeleton skeleton-block"></div>
+        <div class="skeleton skeleton-line" style="width:60%;"></div>
+        <div class="skeleton skeleton-line" style="width:80%;"></div>
+        <div class="skeleton skeleton-line" style="width:45%;"></div>
       </div>
     `;
   },
@@ -159,6 +161,13 @@ const TradeCard = {
             <span class="tc-price-val mono bear">${_fmtPrice(tc.stop_price)}</span>
           </div>
         </div>
+        ${tc.strike != null && tc.delta != null ? `
+        <div class="tc-greeks">
+          <div class="greek-item"><span class="greek-label">Strike</span><span class="greek-value">${parseFloat(tc.strike).toFixed(0)}</span></div>
+          <div class="greek-item"><span class="greek-label">Delta</span><span class="greek-value">${parseFloat(tc.delta).toFixed(2)}</span></div>
+          ${tc.premium_bid != null ? `<div class="greek-item"><span class="greek-label">Premium</span><span class="greek-value">$${parseFloat(tc.premium_bid).toFixed(2)}/$${parseFloat(tc.premium_ask).toFixed(2)}</span></div>` : ""}
+          ${tc.implied_vol != null ? `<div class="greek-item"><span class="greek-label">IV</span><span class="greek-value">${parseFloat(tc.implied_vol).toFixed(1)}%</span></div>` : ""}
+        </div>` : ""}
         <div class="tc-rationale">${_esc(tc.rationale || "")}</div>
         ${tc.key_risk ? `<div class="tc-risk">${_esc(tc.key_risk)}</div>` : ""}
         <div class="tc-meta">
@@ -200,7 +209,7 @@ const ConsensusGauge = {
   _reset() {
     const valEl = document.getElementById("gauge-value");
     const subEl = document.getElementById("gauge-sub");
-    if (valEl) { valEl.textContent = "--"; valEl.className = "gauge-value mono"; }
+    if (valEl) { valEl.textContent = "--"; valEl.className = "gauge-value mono skeleton"; }
     if (subEl) subEl.textContent = "";
     this._animTarget = 0;
     this._animCurrent = 0;
@@ -219,7 +228,7 @@ const ConsensusGauge = {
 
     if (valEl) {
       valEl.textContent = conf.toFixed(0) + "%";
-      valEl.className = "gauge-value mono " + (dir === "BULL" ? "bull" : dir === "BEAR" ? "bear" : "neut");
+      valEl.className = "gauge-value mono " + (dir === "BULL" ? "bull" : dir === "BEAR" ? "bear" : "neut"); // removes skeleton
     }
     if (subEl) {
       subEl.textContent = (agree != null ? agree.toFixed(0) + "% agreement" : "") +
@@ -684,6 +693,295 @@ const SignalHistory = {
   },
 };
 
+// ── Stats Bar ────────────────────────────────────────────────
+
+const StatsBar = {
+  init() {
+    document.addEventListener("ws:connected", () => this.fetch());
+    document.addEventListener("cycle:completed", () => this.fetch());
+    document.addEventListener("market:update", (e) => this._updateMarket(e.detail));
+    document.addEventListener("state:full", (e) => {
+      if (e.detail.market_context) this._updateMarket(e.detail.market_context);
+    });
+  },
+
+  async fetch() {
+    try {
+      const res = await fetch("/api/stats");
+      if (!res.ok) return;
+      const s = await res.json();
+      this._render(s);
+    } catch (e) { /* silent */ }
+  },
+
+  _render(s) {
+    const wr = document.getElementById("stat-winrate");
+    const pnl = document.getElementById("stat-avgpnl");
+    const today = document.getElementById("stat-today");
+    const streak = document.getElementById("stat-streak");
+
+    if (wr) {
+      if (s.resolved > 0) {
+        wr.textContent = s.win_rate.toFixed(0) + "%";
+        wr.className = "stat-value " + (s.win_rate >= 50 ? "bull" : "bear");
+      } else {
+        wr.textContent = "--";
+        wr.className = "stat-value";
+      }
+    }
+    if (pnl) {
+      if (s.resolved > 0) {
+        const v = s.avg_pnl;
+        pnl.textContent = (v >= 0 ? "+" : "") + v.toFixed(2) + "%";
+        pnl.className = "stat-value " + (v >= 0 ? "bull" : "bear");
+      } else {
+        pnl.textContent = "--";
+        pnl.className = "stat-value";
+      }
+    }
+    if (today) {
+      const w = s.wins || 0;
+      const l = s.losses || 0;
+      today.textContent = w + "W / " + l + "L";
+      today.className = "stat-value";
+    }
+    if (streak) {
+      streak.textContent = s.total > 0 ? s.total + " signals" : "--";
+      streak.className = "stat-value";
+    }
+  },
+
+  _updateMarket(ctx) {
+    const pcr = document.getElementById("stat-pcr");
+    const iv = document.getElementById("stat-atmiv");
+    if (pcr && ctx.put_call_ratio != null) {
+      const v = parseFloat(ctx.put_call_ratio);
+      pcr.textContent = v.toFixed(2);
+      pcr.className = "stat-value " + (v > 1.2 ? "bear" : v < 0.8 ? "bull" : "");
+    }
+    if (iv && ctx.atm_iv != null) {
+      iv.textContent = parseFloat(ctx.atm_iv).toFixed(1) + "%";
+      iv.className = "stat-value";
+    }
+  },
+};
+
+// ── Toast Notifications ──────────────────────────────────────
+
+const Toast = {
+  _container: null,
+
+  init() {
+    this._container = document.getElementById("toast-container");
+    document.addEventListener("event:any", (e) => this._onEvent(e.detail));
+  },
+
+  show(title, msg, type, duration) {
+    if (!this._container) return;
+    duration = duration || 4000;
+
+    const el = document.createElement("div");
+    el.className = "toast " + type;
+
+    const icons = { win: "\u2705", loss: "\u274c", info: "\u26a1", error: "\u26a0\ufe0f" };
+    el.innerHTML = `
+      <span class="toast-icon">${icons[type] || "\u26a1"}</span>
+      <div class="toast-body">
+        <div class="toast-title">${_esc(title)}</div>
+        <div class="toast-msg">${_esc(msg)}</div>
+      </div>
+    `;
+
+    this._container.appendChild(el);
+    setTimeout(() => {
+      el.classList.add("toast-out");
+      setTimeout(() => el.remove(), 300);
+    }, duration);
+
+    while (this._container.children.length > 4) {
+      this._container.firstChild.remove();
+    }
+  },
+
+  _onEvent({ type, data }) {
+    switch (type) {
+      case "outcome_resolved": {
+        const outcome = (data.outcome || "").toUpperCase();
+        const pct = parseFloat(data.outcome_pct || 0);
+        const pctStr = (pct >= 0 ? "+" : "") + pct.toFixed(2) + "%";
+        this.show(
+          "Signal #" + data.signal_id + " Resolved",
+          data.direction + " \u2192 " + outcome + " " + pctStr,
+          outcome === "WIN" ? "win" : outcome === "LOSS" ? "loss" : "info"
+        );
+        break;
+      }
+      case "cycle_completed":
+        this.show(
+          "Cycle #" + data.cycle_id + " Complete",
+          "Duration: " + parseFloat(data.duration_sec || 0).toFixed(1) + "s",
+          "info", 3000
+        );
+        break;
+      case "engine_error":
+        this.show("Engine Error", data.message || "Unknown error", "error", 6000);
+        break;
+    }
+  },
+};
+
+// ── Cycle Timer ──────────────────────────────────────────────
+
+const CycleTimer = {
+  _el: null,
+  _startTime: null,
+  _interval: null,
+  _nextCycleAt: null,
+  _cycleIntervalSec: 300,
+
+  init() {
+    this._el = document.getElementById("cycle-timer");
+    document.addEventListener("cycle:started", () => this._start());
+    document.addEventListener("cycle:completed", () => this._stop());
+    document.addEventListener("engine:error", () => this._clearAll());
+  },
+
+  _start() {
+    this._startTime = Date.now();
+    this._nextCycleAt = null;
+    if (this._interval) clearInterval(this._interval);
+    this._interval = setInterval(() => this._tick(), 100);
+    this._tick();
+  },
+
+  _stop() {
+    this._startTime = null;
+    this._nextCycleAt = Date.now() + this._cycleIntervalSec * 1000;
+    if (this._interval) { clearInterval(this._interval); this._interval = null; }
+    this._interval = setInterval(() => this._tick(), 1000);
+    this._tick();
+  },
+
+  _clearAll() {
+    this._startTime = null;
+    this._nextCycleAt = null;
+    if (this._interval) { clearInterval(this._interval); this._interval = null; }
+    this._tick();
+  },
+
+  _tick() {
+    if (!this._el) return;
+    if (this._startTime) {
+      const elapsed = Math.floor((Date.now() - this._startTime) / 1000);
+      const min = Math.floor(elapsed / 60);
+      const sec = elapsed % 60;
+      this._el.textContent = min + ":" + String(sec).padStart(2, "0");
+      this._el.className = "cycle-timer active";
+    } else if (this._nextCycleAt) {
+      const remaining = Math.max(0, Math.floor((this._nextCycleAt - Date.now()) / 1000));
+      if (remaining <= 0) {
+        this._el.textContent = "";
+        this._nextCycleAt = null;
+        if (this._interval) { clearInterval(this._interval); this._interval = null; }
+        return;
+      }
+      const min = Math.floor(remaining / 60);
+      const sec = remaining % 60;
+      this._el.textContent = "Next " + min + ":" + String(sec).padStart(2, "0");
+      this._el.className = "cycle-timer countdown";
+    } else {
+      this._el.textContent = "";
+      this._el.className = "cycle-timer";
+      if (this._interval) { clearInterval(this._interval); this._interval = null; }
+    }
+  },
+};
+
+// ── Mobile Tabs ──────────────────────────────────────────────
+
+const MobileTabs = {
+  _panels: {
+    network: ["panel-network"],
+    signal:  ["panel-center"],
+    debate:  ["panel-right"],
+    history: ["panel-signals", "panel-bottom"],
+  },
+
+  init() {
+    const bar = document.getElementById("mobile-tabs");
+    if (!bar) return;
+    bar.querySelectorAll(".tab-btn").forEach(btn => {
+      btn.addEventListener("click", () => this._switch(btn.dataset.tab));
+    });
+  },
+
+  _switch(tab) {
+    if (window.innerWidth > 768) return;
+    document.querySelectorAll("#mobile-tabs .tab-btn").forEach(b => {
+      const isActive = b.dataset.tab === tab;
+      b.classList.toggle("active", isActive);
+      b.setAttribute("aria-selected", isActive ? "true" : "false");
+    });
+    const allPanels = ["panel-network", "panel-center", "panel-right", "panel-signals", "panel-bottom"];
+    allPanels.forEach(id => {
+      const el = document.getElementById(id);
+      if (el) el.classList.add("mobile-hidden");
+    });
+    const show = this._panels[tab] || [];
+    show.forEach(id => {
+      const el = document.getElementById(id);
+      if (el) el.classList.remove("mobile-hidden");
+    });
+  },
+};
+
+// ── Keyboard Shortcuts ───────────────────────────────────────
+
+const KeyboardShortcuts = {
+  init() {
+    document.addEventListener("keydown", (e) => {
+      if (e.target.tagName === "INPUT" || e.target.tagName === "TEXTAREA") return;
+      const overlay = document.getElementById("shortcuts-overlay");
+      switch (e.key) {
+        case "?":
+          if (overlay) overlay.classList.toggle("visible");
+          break;
+        case "Escape":
+          if (overlay && overlay.classList.contains("visible")) {
+            overlay.classList.remove("visible");
+          }
+          break;
+        case "c":
+          if (!e.ctrlKey && !e.metaKey) {
+            const btn = document.getElementById("trigger-btn");
+            if (btn && !btn.disabled) btn.click();
+          }
+          break;
+        case "1":
+          _scrollToPanel("panel-network");
+          break;
+        case "2":
+          _scrollToPanel("panel-center");
+          break;
+        case "3":
+          _scrollToPanel("panel-right");
+          break;
+      }
+    });
+    const overlay = document.getElementById("shortcuts-overlay");
+    if (overlay) {
+      overlay.addEventListener("click", (e) => {
+        if (e.target === overlay) overlay.classList.remove("visible");
+      });
+    }
+  },
+};
+
+function _scrollToPanel(id) {
+  const el = document.getElementById(id);
+  if (el) el.scrollIntoView({ behavior: "smooth", block: "center" });
+}
+
 // ── Helpers ─────────────────────────────────────────────────
 
 function _fmtPrice(v) {
@@ -709,4 +1007,9 @@ document.addEventListener("DOMContentLoaded", () => {
   DebateRoom.init();
   ActivityLog.init();
   SignalHistory.init();
+  StatsBar.init();
+  Toast.init();
+  CycleTimer.init();
+  MobileTabs.init();
+  KeyboardShortcuts.init();
 });

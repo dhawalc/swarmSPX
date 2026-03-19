@@ -103,6 +103,12 @@ const AgentNetwork = (() => {
   // Cinematic state (Upgrade 3)
   let isCinematic = false;
 
+  // Performance: cached dot grid + idle throttle
+  let dotGridCanvas = null;
+  let dirty = true;       // force redraw when state changes
+  let idleFrameSkip = 0;  // skip frames when idle
+  let hoverThrottleTime = 0;
+
   // ── Init ────────────────────────────────────────────────
   function init(canvasId) {
     canvas = document.getElementById(canvasId || "agent-canvas");
@@ -131,6 +137,25 @@ const AgentNetwork = (() => {
     canvas.style.width = W + "px";
     canvas.style.height = H + "px";
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    _buildDotGridCache();
+    dirty = true;
+  }
+
+  function _buildDotGridCache() {
+    dotGridCanvas = document.createElement("canvas");
+    dotGridCanvas.width = W * dpr;
+    dotGridCanvas.height = H * dpr;
+    const dctx = dotGridCanvas.getContext("2d");
+    dctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    dctx.fillStyle = "rgba(20, 20, 40, 0.25)";
+    const step = 35;
+    for (let x = step; x < W; x += step) {
+      for (let y = step; y < H; y += step) {
+        dctx.beginPath();
+        dctx.arc(x, y, 0.6, 0, Math.PI * 2);
+        dctx.fill();
+      }
+    }
   }
 
   function _buildNodes() {
@@ -212,6 +237,7 @@ const AgentNetwork = (() => {
   // ── Events ──────────────────────────────────────────────
   function _listen() {
     document.addEventListener("agent:voted", (e) => {
+      dirty = true;
       const d = e.detail;
       const node = nodes.find(n => n.id === d.agent_id);
       if (!node) return;
@@ -235,6 +261,7 @@ const AgentNetwork = (() => {
     });
 
     document.addEventListener("state:full", (e) => {
+      dirty = true;
       const state = e.detail;
       const votes = state.votes || {};
       for (const [id, v] of Object.entries(votes)) {
@@ -246,6 +273,7 @@ const AgentNetwork = (() => {
     });
 
     document.addEventListener("cycle:started", () => {
+      dirty = true;
       for (const n of nodes) {
         n.dir = "NEUTRAL";
         n.targetConv = 0;
@@ -259,12 +287,13 @@ const AgentNetwork = (() => {
     });
 
     document.addEventListener("round:completed", () => {
-      // Shockwave from center
+      dirty = true;
       shockwaves.push({ x: W / 2, y: H / 2, radius: 0, maxRadius: Math.max(W, H) * 0.6, alpha: 0.3 });
     });
 
     // ── UPGRADE 1: Consensus Climax ──────────────────────
     document.addEventListener("consensus:reached", (e) => {
+      dirty = true;
       const d = e.detail || {};
       const dir = (d.direction || "").toUpperCase();
       const col = dir === "BULL" ? "#00e676" : dir === "BEAR" ? "#ff1744" : "#40c4ff";
@@ -299,6 +328,7 @@ const AgentNetwork = (() => {
 
     // ── UPGRADE 1: Trade card dramatic flash ─────────────
     document.addEventListener("tradecard:generated", (e) => {
+      dirty = true;
       const d = e.detail || {};
       const dir = (d.direction || d.action || "").toUpperCase();
       const isBull = dir === "BULL" || dir === "BUY";
@@ -313,16 +343,8 @@ const AgentNetwork = (() => {
         setTimeout(() => tcEl.classList.remove("tc-dramatic-flash-bull", "tc-dramatic-flash-bear", "tc-dramatic-flash"), 1300);
       }
 
-      // Secondary pulse from center-panel area
-      const centerPanel = document.getElementById("panel-center");
-      if (centerPanel) {
-        const rect = centerPanel.getBoundingClientRect();
-        const canvasRect = canvas.getBoundingClientRect();
-        const px = rect.left + rect.width / 2 - canvasRect.left;
-        const py = rect.top + rect.height / 2 - canvasRect.top;
-        // Only emit if within canvas bounds roughly
-        shockwaves.push({ x: W * 0.8, y: H * 0.4, radius: 0, maxRadius: Math.max(W, H) * 0.5, alpha: 0.25, color: isBull ? "#00e676" : isBear ? "#ff1744" : "#40c4ff" });
-      }
+      // Secondary pulse on canvas
+      shockwaves.push({ x: W * 0.8, y: H * 0.4, radius: 0, maxRadius: Math.max(W, H) * 0.5, alpha: 0.25, color: isBull ? "#00e676" : isBear ? "#ff1744" : "#40c4ff" });
     });
   }
 
@@ -347,6 +369,20 @@ const AgentNetwork = (() => {
     const dt = Math.min((now - lastTime) / 1000, 0.05); // cap at 50ms
     lastTime = now;
     time += dt;
+
+    // Idle throttle: render at ~10fps when nothing is happening
+    const isActive = dirty || shockwaves.length > 0 || dataParticles.length > 0 ||
+                     thoughtBubbles.length > 0 || consensusFlash.active || consensusGlow.active ||
+                     nodes.some(n => n.glow > 0.01 || n.ring || n.flipFlash > 0.01);
+    if (!isActive) {
+      idleFrameSkip++;
+      if (idleFrameSkip < 6) { // skip 5 of 6 frames (~10fps)
+        requestAnimationFrame(_loop);
+        return;
+      }
+    }
+    idleFrameSkip = 0;
+    dirty = false;
 
     _update(dt);
     _draw();
@@ -508,14 +544,11 @@ const AgentNetwork = (() => {
   }
 
   function _drawDotGrid() {
-    ctx.fillStyle = "rgba(20, 20, 40, 0.25)";
-    const step = 35;
-    for (let x = step; x < W; x += step) {
-      for (let y = step; y < H; y += step) {
-        ctx.beginPath();
-        ctx.arc(x, y, 0.6, 0, Math.PI * 2);
-        ctx.fill();
-      }
+    if (dotGridCanvas) {
+      ctx.save();
+      ctx.setTransform(1, 0, 0, 1, 0, 0);
+      ctx.drawImage(dotGridCanvas, 0, 0);
+      ctx.restore();
     }
   }
 
@@ -533,18 +566,27 @@ const AgentNetwork = (() => {
   function _drawShockwaves() {
     for (const sw of shockwaves) {
       const col = sw.color || "#40c4ff";
+      const lw = sw.lineWidth || 2;
+
+      // Outer ring
       ctx.beginPath();
       ctx.arc(sw.x, sw.y, sw.radius, 0, Math.PI * 2);
       ctx.strokeStyle = _hex2rgba(col, sw.alpha);
-      ctx.lineWidth = sw.lineWidth || 2;
+      ctx.lineWidth = lw;
       ctx.stroke();
 
-      // Inner glow
-      const grad = ctx.createRadialGradient(sw.x, sw.y, sw.radius * 0.95, sw.x, sw.y, sw.radius);
-      grad.addColorStop(0, _hex2rgba(col, 0));
-      grad.addColorStop(1, _hex2rgba(col, sw.alpha * 0.3));
-      ctx.fillStyle = grad;
-      ctx.fill();
+      // Inner glow ring (gradient, no shadowBlur)
+      if (sw.radius > 4) {
+        const innerR = Math.max(0, sw.radius - lw * 3);
+        const grad = ctx.createRadialGradient(sw.x, sw.y, innerR, sw.x, sw.y, sw.radius);
+        grad.addColorStop(0, _hex2rgba(col, 0));
+        grad.addColorStop(0.7, _hex2rgba(col, 0));
+        grad.addColorStop(1, _hex2rgba(col, sw.alpha * 0.2));
+        ctx.beginPath();
+        ctx.arc(sw.x, sw.y, sw.radius, 0, Math.PI * 2);
+        ctx.fillStyle = grad;
+        ctx.fill();
+      }
     }
   }
 
@@ -904,6 +946,10 @@ const AgentNetwork = (() => {
     if (!hoverCardEl || !canvas) return;
 
     canvas.addEventListener("mousemove", (e) => {
+      const now = performance.now();
+      if (now - hoverThrottleTime < 16) return; // ~60fps max
+      hoverThrottleTime = now;
+
       const rect = canvas.getBoundingClientRect();
       const mx = e.clientX - rect.left;
       const my = e.clientY - rect.top;
@@ -921,14 +967,15 @@ const AgentNetwork = (() => {
       if (found) {
         if (hoveredNode !== found) {
           hoveredNode = found;
+          dirty = true;
           _showHoverCard(found, e.clientX, e.clientY, rect);
         } else {
-          // Update position
           _positionHoverCard(e.clientX, e.clientY, rect);
         }
       } else {
         if (hoveredNode) {
           hoveredNode = null;
+          dirty = true;
           hoverCardEl.classList.remove("visible");
         }
       }
