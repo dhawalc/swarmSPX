@@ -39,6 +39,15 @@ def select_strategy(
     regime = market_context.get("market_regime", "unknown")
     spx_price = market_context.get("spx_price", 0)
 
+    # Dealer GEX context — populated by engine when chain is available.
+    # War room §7 (market maker): when net GEX is positive, dealers dampen
+    # vol (mean-revert preferred). When negative, dealers amplify (momentum
+    # / lottos preferred). This is the single highest-leverage data point.
+    gex_regime = market_context.get("gex_regime")
+    gamma_flip = market_context.get("gamma_flip")
+    call_wall = market_context.get("call_wall")
+    put_wall = market_context.get("put_wall")
+
     session = _get_session()
 
     # No options data — return guidance only
@@ -52,6 +61,43 @@ def select_strategy(
             "trade": None,
             "reason": "Low conviction neutral — no clear edge. Sit on hands.",
         }
+
+    # GEX OVERRIDE 1: positive gamma + low-mid conviction → strong condor signal.
+    # Dealers are mean-reverting; selling premium has tailwind from their flow.
+    if gex_regime == "positive_gamma" and confidence < 70 and direction != "NEUTRAL":
+        trade = build_iron_condor(options_snapshot, spx_price)
+        if trade:
+            wall_str = ""
+            if call_wall and put_wall:
+                wall_str = f" (walls {put_wall:.0f}/{call_wall:.0f})"
+            return {
+                "strategy": "IRON_CONDOR",
+                "trade": trade,
+                "reason": f"Positive GEX regime — dealers dampening{wall_str}. "
+                          f"Sell premium for mean-revert tailwind.",
+            }
+
+    # GEX OVERRIDE 2: negative gamma + price near a wall → momentum continuation.
+    # Dealers are forced into amplifying hedges; lottos near the pin can
+    # multiply quickly when the move resolves.
+    if gex_regime == "negative_gamma" and direction in ("BULL", "BEAR") and spx_price > 0:
+        target_wall = call_wall if direction == "BULL" else put_wall
+        if target_wall:
+            distance_pct = abs(target_wall - spx_price) / spx_price * 100
+            if distance_pct < 0.5:
+                trade = select_by_premium(
+                    options_snapshot, spx_price, direction,
+                    premium_min=0.50, premium_max=2.50,
+                )
+                if trade:
+                    trade["target_premium"] = round(trade["premium_ask"] * 5, 2)
+                    return {
+                        "strategy": "LOTTO",
+                        "trade": trade,
+                        "reason": f"Negative GEX + near {direction.lower()} wall "
+                                  f"({target_wall:.0f}, {distance_pct:.2f}% away). "
+                                  f"Dealer hedging amplifies the move.",
+                    }
 
     # Choppy / range-bound — iron condor
     if _is_choppy(regime, confidence, direction):

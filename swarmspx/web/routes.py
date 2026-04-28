@@ -80,6 +80,60 @@ def create_router(state: CycleState, engine: Any) -> APIRouter:
         asyncio.ensure_future(engine.run_cycle())
         return {"message": "Cycle triggered", "cycle_id": (snap.get("cycle_id") or 0) + 1}
 
+    # ── Risk subsystem ──────────────────────────────────────────────────
+    # Dashboards consume /api/risk to show kill-switch banner + sizing cap
+    # + recent outcome counts. Manual ops via POST endpoints.
+
+    @router.get("/risk")
+    async def get_risk_status() -> dict:
+        """Return killswitch state, sizing cap, and recent gated signals."""
+        ks = engine.killswitch.state
+        cap = engine.sizer.get_today_cap()
+
+        try:
+            signals = engine.db.get_recent_signals(limit=20)
+        except Exception:
+            signals = []
+        from collections import Counter
+        outcome_counts = dict(Counter(s.get("outcome", "unknown") for s in signals))
+
+        try:
+            stats = engine.db.get_signal_stats()
+        except Exception:
+            stats = {}
+
+        return {
+            "killswitch": {
+                "tripped": bool(ks.get("tripped")),
+                "triggered_by": ks.get("triggered_by", ""),
+                "triggered_reason": ks.get("triggered_reason", ""),
+                "triggered_at": ks.get("triggered_at", ""),
+                "auto_clear_at": ks.get("auto_clear_at"),
+                "trigger_count": ks.get("trigger_count", 0),
+            },
+            "sizing": cap,
+            "recent_outcomes": outcome_counts,
+            "all_time_stats": stats,
+        }
+
+    @router.post("/risk/trip")
+    async def trip_risk(body: dict) -> dict:
+        """Manually trip the kill switch. Body: {"reason": "<text>"}."""
+        reason = (body or {}).get("reason", "manual via /api/risk/trip")
+        engine.killswitch.trip("manual", reason)
+        log.warning("KILL_SWITCH_TRIPPED via /api/risk/trip: %s", reason)
+        return {"status": "tripped", "reason": reason}
+
+    @router.post("/risk/reset")
+    async def reset_risk(body: dict) -> dict:
+        """Manually clear the kill switch. Body (optional): {"by": "<who>"}."""
+        by = (body or {}).get("by", "api")
+        if not engine.killswitch.is_tripped():
+            return {"status": "noop", "message": "kill switch was already clear"}
+        engine.killswitch.reset(by=by)
+        log.warning("KILL_SWITCH_RESET via /api/risk/reset by %s", by)
+        return {"status": "reset", "by": by}
+
     @router.get("/leaderboard")
     async def get_leaderboard(request: Request, regime: Optional[str] = None) -> dict:
         """Return agent leaderboard sorted by ELO.

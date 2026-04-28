@@ -23,6 +23,7 @@ from swarmspx.risk.gate import PreTradeRiskGate
 from swarmspx.risk.killswitch import KillSwitch
 from swarmspx.risk.sizer import KellyPositionSizer
 from swarmspx.dealer.gex import compute_gex
+from swarmspx.audit import AuditLog
 
 logger = logging.getLogger(__name__)
 
@@ -89,6 +90,12 @@ class SwarmSPXEngine:
             payoff_ratio=risk_cfg.get("payoff_ratio", 3.0),
             max_per_trade_pct=risk_cfg.get("max_per_trade_pct", 0.05),
             lock_dir=risk_cfg.get("lock_dir", "data"),
+        )
+
+        # Per-decision audit log (JSONL, ET-partitioned). Read by future
+        # backtester replay + ML training pipelines.
+        self.audit = AuditLog(
+            base_dir=risk_cfg.get("audit_dir", "data/decisions"),
         )
 
         self._cycle_lock = asyncio.Lock()
@@ -261,6 +268,22 @@ class SwarmSPXEngine:
                     self.db.store_agent_votes(signal_id, consensus["individual_votes"], regime)
                     logger.info("Stored %d individual agent votes for signal #%d",
                                len(consensus["individual_votes"]), signal_id)
+
+                # 8d. Per-decision audit log (JSONL, ET-partitioned).
+                # Always append, even gated signals — audit needs full coverage.
+                self.audit.append(
+                    cycle_id=cycle_id,
+                    market_context=market_context,
+                    consensus=consensus,
+                    strategy=strategy,
+                    sizing=trade_card.get("sizing", {}),
+                    risk_decision=trade_card.get("risk_decision", {}),
+                    signal_id=signal_id,
+                    entry_premium=strategy_meta["entry_premium"],
+                    option_strike=strategy_meta["option_strike"],
+                    option_type=strategy_meta["option_type"],
+                    outcome=signal_outcome,
+                )
 
                 # 9. Resolve pending signals + auto-evaluate kill-switch loss bands
                 await self.tracker.check_pending_signals()
