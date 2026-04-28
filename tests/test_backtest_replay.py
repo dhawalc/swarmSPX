@@ -40,11 +40,36 @@ def test_simclock_rejects_rewind():
 
 # ── EventReplayer (scaffold — fails loudly) ──────────────────────────────────
 
-def test_event_replayer_raises_until_wired():
-    """EventReplayer is a scaffold; must NOT silently produce fake data."""
+def test_event_replayer_raises_on_missing_file():
+    """Missing parquet must fail loudly, not silently produce fake data."""
     rep = EventReplayer("/nonexistent.parquet")
-    with pytest.raises(NotImplementedError):
+    with pytest.raises(FileNotFoundError):
         list(rep.stream())
+
+
+def test_event_replayer_streams_d2dt_spy_when_present():
+    """When the D2DT SPY parquet is available, EventReplayer yields events."""
+    import os
+    from pathlib import Path
+    spy_path = Path("/home/dhawal/D2DT/backend/data/minute_cache/SPY_1m_5d.parquet")
+    if not spy_path.exists():
+        pytest.skip("D2DT data not available in this environment")
+
+    rep = EventReplayer(str(spy_path))
+    # Iterate first 5 events to verify schema + multiplier
+    events = []
+    for i, e in enumerate(rep.stream()):
+        events.append(e)
+        if i >= 4:
+            break
+
+    assert len(events) == 5
+    for e in events:
+        assert e.event_type == "minute_bar"
+        assert e.spx_price > 1000  # SPY × 10 should be ~5000-7000 SPX equivalent
+        assert e.spx_bid > 0 and e.spx_ask > 0
+        assert e.spx_bid <= e.spx_ask
+        assert "volume" in e.payload
 
 
 # ── HalfSpreadPlusImpactSlippage ─────────────────────────────────────────────

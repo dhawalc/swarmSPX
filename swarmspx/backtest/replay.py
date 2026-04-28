@@ -82,17 +82,48 @@ class EventReplayer:
         self,
         start: Optional[datetime] = None,
         end: Optional[datetime] = None,
+        spx_multiplier: float = 10.0,
     ) -> Iterator[MarketEvent]:
-        """Yield events in [start, end] (inclusive) sorted by ts_exchange.
+        """Yield MarketEvents from a 1m bar Parquet file (D2DT-format).
 
-        TODO: implement Parquet read via pyarrow once historical-data wiring
-        lands. For now, raises NotImplementedError so callers fail loudly
-        rather than silently using fake data.
+        Schema expected: DatetimeIndex (UTC tz-aware) + columns
+        ``open, high, low, close, volume, vwap``. Each minute bar emits
+        one ``minute_bar`` event with t_exchange = bar timestamp.
+
+        Args:
+            start, end: optional filters (inclusive).
+            spx_multiplier: SPY → SPX-equivalent multiplier (~10×). For
+                            actual SPX bars pass 1.0.
+
+        Compatible with /home/dhawal/D2DT/backend/data/minute_cache/SPY_1m_*.parquet.
         """
-        raise NotImplementedError(
-            "EventReplayer.stream needs Polygon historical wiring. "
-            "See .review/warroom/00-BATTLE-PLAN.md Tier 1."
-        )
+        import pandas as pd
+
+        if not self.path.exists():
+            raise FileNotFoundError(f"Parquet not found: {self.path}")
+
+        df = pd.read_parquet(self.path)
+        if start is not None:
+            df = df[df.index >= start] if df.index.name else df[df.index >= start]
+        if end is not None:
+            df = df[df.index <= end]
+
+        for ts, row in df.iterrows():
+            close_px = float(row["close"]) * spx_multiplier
+            yield MarketEvent(
+                ts_exchange=ts.to_pydatetime() if hasattr(ts, "to_pydatetime") else ts,
+                ts_arrival=ts.to_pydatetime() if hasattr(ts, "to_pydatetime") else ts,
+                event_type="minute_bar",
+                spx_price=close_px,
+                spx_bid=float(row["low"]) * spx_multiplier,
+                spx_ask=float(row["high"]) * spx_multiplier,
+                payload={
+                    "open": float(row["open"]) * spx_multiplier,
+                    "close": close_px,
+                    "volume": int(row["volume"]),
+                    "vwap": float(row["vwap"]) * spx_multiplier if "vwap" in df.columns else close_px,
+                },
+            )
 
 
 # ── Simulation clock ──────────────────────────────────────────────────────────
