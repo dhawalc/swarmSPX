@@ -86,6 +86,12 @@ Regime: {market_context.get('market_regime', 'unknown')}
                 )
             options_str = "\n".join(lines)
 
+        # Dealer GEX block — present only when computed from chain (Tier 1 wired).
+        # This is the single highest-leverage data the agents see (war room §7).
+        gex_str = market_context.get("gex_block") or ""
+        if gex_str:
+            gex_str = "\n" + gex_str
+
         peers_str = ""
         if peers_votes and round_num > 1:
             vote_counts = {"BULL": 0, "BEAR": 0, "NEUTRAL": 0}
@@ -111,6 +117,7 @@ Regime: {market_context.get('market_regime', 'unknown')}
 MARKET DATA (Round {round_num}):
 {market_str}
 {options_str}
+{gex_str}
 {peers_str}
 {prior_str}
 {memory_context}
