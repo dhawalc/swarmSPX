@@ -12,6 +12,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Optional
 
+from swarmspx.clock import get_session as _clock_get_session
 from swarmspx.ingest.options import (
     OptionsSnapshot,
     select_by_premium,
@@ -124,18 +125,14 @@ def select_strategy(
 
 
 def _get_session() -> str:
-    """Determine trading session: morning, midday, afternoon."""
-    now = datetime.now()
-    hour = now.hour
-    minute = now.minute
-    t = hour * 100 + minute
+    """Determine trading session: morning, midday, afternoon — anchored on ET.
 
-    if t < 1130:  # Before 11:30 AM
-        return "morning"
-    elif t < 1300:  # 11:30 AM - 1:00 PM
-        return "midday"
-    else:
-        return "afternoon"
+    Delegates to swarmspx.clock.get_session() which uses
+    ZoneInfo("America/New_York"). Without ET anchoring, a UTC server would
+    classify 03:30 AM ET (07:30 UTC) as the end of "morning" and afternoon
+    lottos would fire before market open (review #8).
+    """
+    return _clock_get_session()
 
 
 def _is_choppy(regime: str, confidence: float, direction: str) -> bool:

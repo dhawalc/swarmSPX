@@ -13,6 +13,7 @@ import logging
 from datetime import datetime
 from typing import Optional
 
+from swarmspx.clock import is_market_hours as _clock_is_market_hours
 from swarmspx.ingest.schwab import SchwabClient
 from swarmspx.ingest.tradier import TradierClient
 from swarmspx.ingest.options import OptionContract, OptionsSnapshot
@@ -202,6 +203,64 @@ class MarketDataFetcher:
             for c in near_atm
         ]
 
+    async def lookup_option_premium(
+        self,
+        strike: float,
+        option_type: str,
+    ) -> Optional[float]:
+        """Return the current mid premium for a specific SPX option contract.
+
+        Used by OutcomeTracker at resolution time to compute honest option-P&L
+        instead of SPX-move-based outcomes (review #1).
+
+        Args:
+            strike:      Contract strike (e.g. 5450.0).
+            option_type: 'call' or 'put'.
+
+        Returns:
+            Mid price (float) if the contract is found, else None.
+            Returns 0.0 if found but worthless (bid/ask both zero).
+
+        Note: a return value of None on EOD often means the option expired
+        worthless. The caller should treat None as exit_premium=0.0 only when
+        they have evidence the contract was valid at entry; otherwise defer.
+        """
+        if not strike or strike <= 0:
+            return None
+        ot = (option_type or "").lower()
+        if ot not in ("call", "put"):
+            return None
+
+        contracts: list[OptionContract] = []
+        if self.schwab.is_configured:
+            try:
+                raw_chain = self.schwab.get_option_chain("$SPX", strike_count=40)
+                if raw_chain:
+                    contracts = [OptionContract.from_raw(r) for r in raw_chain]
+            except Exception as e:
+                logger.warning("Schwab chain lookup failed: %s", e)
+
+        if not contracts and self.tradier.is_configured:
+            try:
+                raw_chain = await self.tradier.get_options_chain()
+                if raw_chain:
+                    contracts = [OptionContract.from_raw(r) for r in raw_chain]
+            except Exception as e:
+                logger.warning("Tradier chain lookup failed: %s", e)
+
+        if not contracts:
+            return None
+
+        for c in contracts:
+            if c.option_type == ot and abs(c.strike - strike) < 0.01:
+                if c.mid > 0:
+                    return c.mid
+                if c.bid > 0:
+                    return c.bid
+                return 0.0  # found but worthless
+
+        return None  # contract not in chain (likely expired)
+
     @staticmethod
     def _calculate_vwap(bars) -> float:
         if bars.empty:
@@ -223,8 +282,12 @@ class MarketDataFetcher:
 
     @staticmethod
     def _is_market_hours() -> bool:
-        now = datetime.now()
-        return 930 <= now.hour * 100 + now.minute <= 1600
+        """Return True during regular SPX session (Mon-Fri 09:30-16:00 ET).
+
+        Delegates to swarmspx.clock.is_market_hours() — the prior naive
+        datetime.now() check produced wrong answers on UTC servers.
+        """
+        return _clock_is_market_hours()
 
     @staticmethod
     def _empty_snapshot() -> dict:

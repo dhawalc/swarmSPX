@@ -66,7 +66,7 @@ KNOWN_AGENTS = frozenset([
     "level_lucy", "tick_tina",
     # Macro tribe
     "fed_fred", "flow_fiona", "vix_vinny", "gex_gina",
-    "put_call_pete", "breadth_brad",
+    "putcall_pete", "breadth_brad",
     # Sentiment tribe
     "twitter_tom", "contrarian_carl", "fear_felicia", "news_nancy",
     "retail_ray", "whale_wanda",
@@ -116,6 +116,74 @@ def _softmax_weights(elos: list[float], temperature: float) -> list[float]:
     exps = [math.exp(s - max_s) for s in scaled]
     total = sum(exps)
     return [e / total for e in exps]
+
+
+def _apply_floor(weights: list[float], min_weight: float) -> list[float]:
+    """Floor each weight at ``min_weight`` and renormalize so the result sums to 1.0.
+
+    Greedy correct algorithm: any weight that would still be below the floor
+    after rescaling gets pinned to ``min_weight`` and removed from the active
+    pool; remaining "above-floor" weights are scaled to consume
+    ``budget = 1 - n_floored * min_weight``.
+
+    The naive approach (``floored = [max(w, mw) for w in weights];
+    return [w / sum(floored) for w in floored]``) is wrong: dividing by the
+    inflated total pushes just-floored weights *back below* the floor.  The
+    iterative-renormalize version of that approach (10 passes, convergence
+    check) does not actually converge in realistic ELO spreads — final weights
+    sit a hair below the floor.  This function gives the correct one-shot
+    result.
+
+    Edge cases:
+      * empty input → ``[]``
+      * ``n * min_weight >= 1`` → equal weights (floor unsatisfiable as a
+        sum-to-1 constraint; degrade gracefully).
+      * all-zero or negative active mass → equal share of remaining budget.
+    """
+    n = len(weights)
+    if n == 0:
+        return []
+    if n * min_weight >= 1.0:
+        return [1.0 / n] * n
+
+    out = [float(w) for w in weights]
+    floored = [False] * n
+
+    # Bounded by n iterations: each pass either terminates (no violators)
+    # or pins exactly one previously-active weight.
+    for _ in range(n + 1):
+        active_idx = [i for i in range(n) if not floored[i]]
+        if not active_idx:
+            break
+
+        budget = 1.0 - sum(min_weight for f in floored if f)
+        active_sum = sum(out[i] for i in active_idx)
+
+        if active_sum <= 0:
+            # No active mass — share budget equally
+            per = budget / len(active_idx)
+            for i in active_idx:
+                out[i] = per
+            break
+
+        scale = budget / active_sum
+        violators = [
+            i for i in active_idx
+            if out[i] * scale < min_weight - 1e-12
+        ]
+        if not violators:
+            for i in active_idx:
+                out[i] = out[i] * scale
+            break
+
+        # Pin the smallest violator. Pinning one-at-a-time is the only
+        # correct choice — pinning all violators simultaneously would
+        # over-consume the budget.
+        i_min = min(violators, key=lambda i: out[i])
+        floored[i_min] = True
+        out[i_min] = min_weight
+
+    return out
 
 
 # ── Main class ───────────────────────────────────────────────────────────────
@@ -268,23 +336,12 @@ class AgentScorer:
             equal = 1.0 / len(agent_ids)
             return {aid: equal for aid in agent_ids}
 
-        # Softmax over ELO values
+        # Softmax over ELO values, then apply MIN_WEIGHT floor with one-shot
+        # renormalization (see _apply_floor docstring for why iterating the
+        # naive floor+renorm doesn't actually converge).
         raw_weights = _softmax_weights(elos, SOFTMAX_TEMP)
-
-        # Apply floor iteratively: floor at MIN_WEIGHT, renormalise, repeat until
-        # stable.  Naïve single-pass floor + renorm can push floored values back
-        # below the floor after division by the inflated denominator.
-        weights_arr = list(raw_weights)
-        for _ in range(10):  # converges in practice within 2-3 iterations
-            floored = [max(w, MIN_WEIGHT) for w in weights_arr]
-            total = sum(floored)
-            weights_arr = [w / total for w in floored]
-            # Stop when no weight violates the floor (allowing tiny fp epsilon)
-            if all(w >= MIN_WEIGHT - 1e-9 for w in weights_arr):
-                break
-
-        weights = dict(zip(agent_ids, weights_arr))
-        return weights
+        weights_arr = _apply_floor(raw_weights, MIN_WEIGHT)
+        return dict(zip(agent_ids, weights_arr))
 
     def credit_agent(
         self,
@@ -376,11 +433,21 @@ class AgentScorer:
         # On a loss, agents who opposed consensus were correct.
         correct_direction = consensus_direction if outcome == "win" else self._opposite(consensus_direction)
 
+        neutral_count = 0
         for vote in agent_votes:
             agent_id = vote.get("agent_id")
             direction = vote.get("direction")
 
             if not agent_id or not direction:
+                continue
+
+            # NEUTRAL votes are abstentions — neither rewarded nor punished.
+            # Without this guard, NEUTRAL agents are penalised on every
+            # resolved signal because correct_direction is always BULL or BEAR
+            # (never NEUTRAL) for a non-scratch outcome. Hedgers would get
+            # systematically crushed in the leaderboard.
+            if direction == "NEUTRAL":
+                neutral_count += 1
                 continue
 
             was_correct = (direction == correct_direction)
@@ -397,8 +464,10 @@ class AgentScorer:
         # Persist updated scores to DB
         self._sync_to_db()
         logger.info(
-            "Signal %d processed: outcome=%s regime=%s consensus=%s agents_updated=%d",
-            signal_id, outcome, regime, consensus_direction, len(agent_votes),
+            "Signal %d processed: outcome=%s regime=%s consensus=%s "
+            "agents_updated=%d neutrals_skipped=%d",
+            signal_id, outcome, regime, consensus_direction,
+            len(agent_votes) - neutral_count, neutral_count,
         )
 
     def get_leaderboard(self, regime: Optional[str] = None) -> list[dict]:

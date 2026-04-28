@@ -93,15 +93,30 @@ class Database:
             conn.execute("""
                 CREATE SEQUENCE IF NOT EXISTS agent_scores_id_seq
             """)
-            # Migrate old schemas: add columns if missing
-            try:
-                conn.execute("SELECT spx_entry_price FROM simulation_results LIMIT 0")
-            except Exception:
-                conn.execute("ALTER TABLE simulation_results ADD COLUMN spx_entry_price DOUBLE DEFAULT 0.0")
-            try:
-                conn.execute("SELECT memory_id FROM simulation_results LIMIT 0")
-            except Exception:
-                conn.execute("ALTER TABLE simulation_results ADD COLUMN memory_id VARCHAR DEFAULT ''")
+            # Schema migrations — idempotent ADD COLUMN if missing.
+            #
+            # Pattern: probe with SELECT col LIMIT 0; on failure, ALTER TABLE.
+            # Multiple init_schema() calls are safe.  Option-P&L columns
+            # (entry/exit_premium, strike, type) are required so OutcomeTracker
+            # can compute outcome from option premium delta instead of SPX
+            # move (review #1: training data was on the wrong signal).
+            _migrations = [
+                ("spx_entry_price", "DOUBLE DEFAULT 0.0"),
+                ("memory_id",       "VARCHAR DEFAULT ''"),
+                ("entry_premium",   "DOUBLE DEFAULT 0.0"),
+                ("exit_premium",    "DOUBLE DEFAULT 0.0"),
+                ("option_strike",   "DOUBLE DEFAULT 0.0"),
+                ("option_type",     "VARCHAR DEFAULT ''"),
+            ]
+            for col_name, col_type in _migrations:
+                try:
+                    conn.execute(f"SELECT {col_name} FROM simulation_results LIMIT 0")
+                except duckdb.Error:
+                    # Column missing — apply migration.
+                    conn.execute(
+                        f"ALTER TABLE simulation_results ADD COLUMN "
+                        f"{col_name} {col_type}"
+                    )
         finally:
             self._close(conn)
 
@@ -141,58 +156,89 @@ class Database:
             self._close(conn)
 
     def store_simulation_result(self, result: dict) -> Optional[int]:
-        """Store a simulation result and return its ID."""
+        """Store a simulation result and return its ID.
+
+        Optional keys for option-P&L tracking (review #1):
+          entry_premium  — premium paid (or net debit) at signal time
+          option_strike  — strike of the selected option (0.0 for spreads)
+          option_type    — 'call' / 'put' / '' (empty for spreads/condors)
+        """
         conn = self._connect()
         try:
             row = conn.execute("""
                 INSERT INTO simulation_results
-                (id, timestamp, direction, confidence, agreement_pct, spx_entry_price, memory_id,
-                 trade_setup, agent_votes, outcome, outcome_pct)
-                VALUES (nextval('simulation_results_id_seq'), ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                (id, timestamp, direction, confidence, agreement_pct,
+                 spx_entry_price, entry_premium, option_strike, option_type,
+                 memory_id, trade_setup, agent_votes, outcome, outcome_pct)
+                VALUES (nextval('simulation_results_id_seq'),
+                        ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 RETURNING id
             """, [
                 datetime.now().isoformat(),
                 result.get("direction", "NEUTRAL"),
-                result.get("confidence", 0.0),
-                result.get("agreement_pct", 0.0),
-                result.get("spx_entry_price", 0.0),
+                float(result.get("confidence", 0.0) or 0.0),
+                float(result.get("agreement_pct", 0.0) or 0.0),
+                float(result.get("spx_entry_price", 0.0) or 0.0),
+                float(result.get("entry_premium", 0.0) or 0.0),
+                float(result.get("option_strike", 0.0) or 0.0),
+                result.get("option_type", "") or "",
                 result.get("memory_id"),
                 json.dumps(result.get("trade_setup", {})),
                 json.dumps(result.get("agent_votes", {})),
                 result.get("outcome", "pending"),
-                result.get("outcome_pct", 0.0)
+                float(result.get("outcome_pct", 0.0) or 0.0),
             ]).fetchone()
             return row[0] if row else None
         finally:
             self._close(conn)
 
-    def update_outcome(self, signal_id: int, outcome: str, outcome_pct: float):
-        """Update a signal's outcome after resolution."""
+    def update_outcome(
+        self,
+        signal_id: int,
+        outcome: str,
+        outcome_pct: float,
+        exit_premium: float = 0.0,
+    ):
+        """Update a signal's outcome after resolution.
+
+        Args:
+            signal_id:    Row id in simulation_results.
+            outcome:      'win' / 'loss' / 'scratch'.
+            outcome_pct:  P&L as a percentage (e.g. +75.0 means +75%).
+            exit_premium: Option premium at resolution (0.0 if N/A).
+        """
         conn = self._connect()
         try:
             conn.execute("""
                 UPDATE simulation_results
-                SET outcome = ?, outcome_pct = ?
+                SET outcome = ?, outcome_pct = ?, exit_premium = ?
                 WHERE id = ?
-            """, [outcome, outcome_pct, signal_id])
+            """, [outcome, float(outcome_pct), float(exit_premium), signal_id])
         finally:
             self._close(conn)
 
     def get_pending_signals(self, max_age_hours: int = 24) -> list[dict]:
-        """Get unresolved signals from the last N hours."""
+        """Get unresolved signals from the last N hours.
+
+        Returns dicts including option-P&L fields (entry_premium, option_strike,
+        option_type) so OutcomeTracker can compute resolution based on actual
+        option premium delta, not SPX move.
+        """
         cutoff = (datetime.now() - timedelta(hours=max_age_hours)).isoformat()
         conn = self._connect()
         try:
             rows = conn.execute("""
-                SELECT id, timestamp, direction, confidence, spx_entry_price, memory_id,
-                       trade_setup, agent_votes
+                SELECT id, timestamp, direction, confidence,
+                       spx_entry_price, entry_premium, option_strike, option_type,
+                       memory_id, trade_setup, agent_votes
                 FROM simulation_results
                 WHERE outcome = 'pending' AND timestamp > ?
                 ORDER BY timestamp ASC
             """, [cutoff]).fetchall()
             if not rows:
                 return []
-            cols = ["id", "timestamp", "direction", "confidence", "spx_entry_price",
+            cols = ["id", "timestamp", "direction", "confidence",
+                    "spx_entry_price", "entry_premium", "option_strike", "option_type",
                     "memory_id", "trade_setup", "agent_votes"]
             return [dict(zip(cols, row)) for row in rows]
         finally:

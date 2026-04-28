@@ -17,6 +17,7 @@ import logging
 from datetime import datetime, time as dtime
 from typing import Optional
 
+from swarmspx.clock import now_et
 from swarmspx.engine import SwarmSPXEngine
 from swarmspx.briefing import MorningBriefing
 from swarmspx.events import EventBus
@@ -65,14 +66,22 @@ class SwarmScheduler:
             f"  15:45 \\- Close \\+ Summary"
         )
 
+        last_et_date = None
         while True:
-            now = datetime.now()
-            current_h = now.hour + self.tz_offset
-            current_m = now.minute
+            # ET-anchored clock — DST-aware, no manual offset needed.
+            # Replaces the prior `now.hour + tz_offset` arithmetic which
+            # produced wrong hours on UTC servers and silently fired nothing.
+            now_et_dt = now_et()
+            current_h = now_et_dt.hour
+            current_m = now_et_dt.minute
+            current_date = now_et_dt.date()
 
-            # Reset ran_today at midnight
-            if current_h == 0 and current_m == 0:
+            # Reset ran_today at the ET day boundary (instead of relying on
+            # hitting an exact 00:00 minute, which a long-running cycle could
+            # easily skip and lock out the next day's schedule entirely).
+            if last_et_date is not None and current_date != last_et_date:
                 self._ran_today.clear()
+            last_et_date = current_date
 
             # Check each scheduled slot
             for hour, minute, action in SCHEDULE:

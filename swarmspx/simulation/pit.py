@@ -81,14 +81,22 @@ class TradingPit:
 
         for i in range(0, len(self.agents), BATCH_SIZE):
             batch = self.agents[i:i + BATCH_SIZE]
-            tasks = []
-            for agent in batch:
-                memory_context = self.memory.recall_for_agent(
+            # Memory recalls are async — fetch in parallel before dispatching
+            # agent thinking (review #6: was blocking the event loop).
+            # recall_for_agent fail-softs to "" so we don't need return_exceptions.
+            regime = market_context.get("market_regime", "")
+            memory_contexts = await asyncio.gather(*[
+                self.memory.recall_for_agent(
                     agent_id=agent.agent_id,
                     specialty=agent.specialty,
-                    market_context=market_context.get("market_regime", "")
+                    market_context=regime,
                 )
-                tasks.append(agent.think(market_context, round_num, prior_votes, memory_context))
+                for agent in batch
+            ])
+            tasks = [
+                agent.think(market_context, round_num, prior_votes, memory_contexts[j])
+                for j, agent in enumerate(batch)
+            ]
             batch_votes = await asyncio.gather(*tasks, return_exceptions=True)
             for j, vote in enumerate(batch_votes):
                 if isinstance(vote, AgentVote):

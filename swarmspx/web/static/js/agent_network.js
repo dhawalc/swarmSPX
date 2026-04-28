@@ -1044,6 +1044,10 @@ const AgentNetwork = (() => {
     const dirClass = n.dir === "BULL" ? "border-bull" : n.dir === "BEAR" ? "border-bear" : "border-neutral";
     const dirColor = n.dir === "BULL" ? "bull" : n.dir === "BEAR" ? "bear" : "neut";
 
+    const elo = n.elo || _eloMap[n.id];
+    const eloStr = elo ? ` &bull; ELO ${Math.round(elo)}` : "";
+    const eloColor = elo >= 1050 ? "var(--bull)" : elo <= 950 ? "var(--bear)" : "var(--text-dim)";
+
     hoverCardEl.className = "agent-hover-card visible " + dirClass;
     hoverCardEl.innerHTML = `
       <div class="ahc-name">${_escHtml(meta.name)}</div>
@@ -1052,6 +1056,7 @@ const AgentNetwork = (() => {
       <div class="ahc-vote">
         <span class="${dirColor}">${n.dir}</span>
         <span style="color:var(--text-dim);">${Math.round(n.conv)}% conviction</span>
+        ${elo ? `<span style="color:${eloColor};font-size:.62rem;">${eloStr}</span>` : ""}
       </div>
       ${n.reasoning ? `<div class="ahc-reasoning">${_escHtml(n.reasoning.length > 140 ? n.reasoning.slice(0, 137) + "..." : n.reasoning)}</div>` : ""}
     `;
