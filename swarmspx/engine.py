@@ -24,6 +24,7 @@ from swarmspx.risk.killswitch import KillSwitch
 from swarmspx.risk.sizer import KellyPositionSizer
 from swarmspx.dealer.gex import compute_gex
 from swarmspx.audit import AuditLog
+from swarmspx.paper import PaperBroker
 
 logger = logging.getLogger(__name__)
 
@@ -97,6 +98,19 @@ class SwarmSPXEngine:
         self.audit = AuditLog(
             base_dir=risk_cfg.get("audit_dir", "data/decisions"),
         )
+
+        # Paper trading simulator — opt-in via settings.paper_trading.enabled.
+        # Off by default so existing setups (and tests) don't accidentally
+        # accumulate phantom positions.  When enabled, every PASS-gate
+        # signal opens a paper position; exits checked each cycle.
+        paper_cfg = (self.settings.get("paper_trading") or {})
+        self.paper: Optional[PaperBroker] = None
+        if paper_cfg.get("enabled"):
+            self.paper = PaperBroker(
+                self.db,
+                target_multiplier=paper_cfg.get("target_multiplier", 2.0),
+                stop_multiplier=paper_cfg.get("stop_multiplier", 0.5),
+            )
 
         self._cycle_lock = asyncio.Lock()
 
@@ -269,6 +283,29 @@ class SwarmSPXEngine:
                     logger.info("Stored %d individual agent votes for signal #%d",
                                len(consensus["individual_votes"]), signal_id)
 
+                # 8d. Open paper position (when enabled + gate passed + valid trade)
+                if (
+                    self.paper is not None
+                    and signal_id is not None
+                    and risk_decision.passed
+                    and strategy_meta["entry_premium"] > 0
+                    and strategy_meta["option_strike"] > 0
+                    and strategy_meta["option_type"] in ("call", "put")
+                    and sizing.contracts >= 1
+                ):
+                    target = (strategy or {}).get("trade", {}).get("target_premium")
+                    paper_position_id = self.paper.open_position(
+                        signal_id=signal_id,
+                        direction=consensus["direction"],
+                        option_strike=strategy_meta["option_strike"],
+                        option_type=strategy_meta["option_type"],
+                        entry_premium=strategy_meta["entry_premium"],
+                        contracts=sizing.contracts,
+                        target_premium=target,
+                    )
+                    if paper_position_id is not None:
+                        trade_card.setdefault("paper", {})["position_id"] = paper_position_id
+
                 # 8d. Per-decision audit log (JSONL, ET-partitioned).
                 # Always append, even gated signals — audit needs full coverage.
                 self.audit.append(
@@ -288,6 +325,18 @@ class SwarmSPXEngine:
                 # 9. Resolve pending signals + auto-evaluate kill-switch loss bands
                 await self.tracker.check_pending_signals()
                 self._evaluate_killswitch_loss_bands()
+
+                # 9b. Paper broker — close positions hitting target/stop/EOD.
+                if self.paper is not None:
+                    try:
+                        paper_exits = await self.paper.check_exits(self.fetcher)
+                        if paper_exits:
+                            logger.info(
+                                "Paper exits this cycle: %d closed",
+                                len(paper_exits),
+                            )
+                    except Exception:
+                        logger.exception("Paper broker check_exits raised")
 
                 return trade_card
 
