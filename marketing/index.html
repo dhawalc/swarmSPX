@@ -1,0 +1,229 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>SwarmSPX — 24 AI Agents Debate SPX 0DTE Trades. Your Second Opinion.</title>
+<meta name="description" content="Watch 24 specialized AI agents debate every SPX 0DTE trade in real-time. Live GEX. Risk gate. Paper broker. Honest backtester. The AI war room for retail options traders." />
+
+<meta property="og:title" content="SwarmSPX — Multi-agent intelligence for SPX 0DTE traders" />
+<meta property="og:description" content="24 AI agents debate every trade. Live dealer-gamma. Built-in risk gate. Paper broker. Open-source spine, hosted dashboard." />
+<meta property="og:type" content="website" />
+
+<script src="https://cdn.tailwindcss.com"></script>
+<style>
+  body { background:#0a0a0f; color:#e6e6f0; font-family:'Inter','SF Pro',ui-sans-serif,system-ui; }
+  .glow { text-shadow:0 0 20px rgba(125,125,255,0.45); }
+  .grad-text { background:linear-gradient(135deg,#7dd3fc 0%,#a78bfa 50%,#f472b6 100%); -webkit-background-clip:text; -webkit-text-fill-color:transparent; }
+  .card { background:rgba(20,20,30,0.6); backdrop-filter:blur(8px); border:1px solid rgba(255,255,255,0.08); }
+  .card:hover { border-color:rgba(167,139,250,0.45); }
+  .pulse-dot { width:8px; height:8px; border-radius:50%; background:#22c55e; box-shadow:0 0 12px #22c55e; animation:pulse 2s infinite; }
+  @keyframes pulse { 0%,100% { opacity:1; } 50% { opacity:0.4; } }
+  .grid-bg { background-image:radial-gradient(circle at 1px 1px,rgba(255,255,255,0.04) 1px,transparent 0); background-size:24px 24px; }
+</style>
+</head>
+<body class="grid-bg">
+
+<nav class="container mx-auto px-6 py-5 flex items-center justify-between">
+  <div class="flex items-center gap-2">
+    <div class="text-xl font-bold grad-text">SwarmSPX</div>
+    <span class="text-xs px-2 py-0.5 rounded-full bg-purple-900/40 text-purple-300 border border-purple-500/30">v1.3 PUBLIC BETA</span>
+  </div>
+  <div class="hidden md:flex gap-8 text-sm text-gray-300">
+    <a href="#how" class="hover:text-white">How it works</a>
+    <a href="#proof" class="hover:text-white">Backtest</a>
+    <a href="#pricing" class="hover:text-white">Pricing</a>
+    <a href="https://github.com/dhawalc/swarmSPX" class="hover:text-white">GitHub</a>
+  </div>
+  <a href="#waitlist" class="bg-white text-black px-4 py-2 rounded-lg text-sm font-medium hover:bg-gray-200">Join waitlist</a>
+</nav>
+
+<section class="container mx-auto px-6 pt-16 pb-24 text-center">
+  <div class="inline-flex items-center gap-2 px-3 py-1 mb-6 rounded-full bg-green-900/20 border border-green-500/30 text-green-300 text-xs">
+    <span class="pulse-dot"></span>
+    LIVE — 24 AGENTS DEBATING NOW
+  </div>
+  <h1 class="text-5xl md:text-7xl font-bold leading-tight mb-6">
+    24 AI agents debate <br/>
+    <span class="grad-text glow">your next SPX trade</span>
+  </h1>
+  <p class="text-xl text-gray-400 max-w-2xl mx-auto mb-10">
+    Watch a swarm of specialized AI traders argue about every 0DTE setup in real-time. Live dealer-gamma. Built-in risk gate. Paper broker. Honest backtester. The AI war room for retail options traders &mdash; a tool, not a guarantee.
+  </p>
+  <div class="flex flex-wrap justify-center gap-4 mb-16">
+    <a href="#waitlist" class="bg-gradient-to-r from-purple-500 to-pink-500 text-white px-8 py-3.5 rounded-lg font-medium text-lg hover:opacity-90 transition">Get early access</a>
+    <a href="#proof" class="bg-white/5 border border-white/10 text-white px-8 py-3.5 rounded-lg font-medium text-lg hover:bg-white/10 transition">See the backtest</a>
+  </div>
+
+  <div class="flex flex-wrap justify-center gap-6 text-xs text-gray-500 max-w-3xl mx-auto">
+    <span>&check; Open-source core</span>
+    <span>&check; 298 passing tests</span>
+    <span>&check; Live Schwab/Tradier integration</span>
+    <span>&check; Real backtest with documented caveats</span>
+    <span>&check; NOT financial advice &mdash; research tool only</span>
+  </div>
+</section>
+
+<section id="how" class="container mx-auto px-6 py-24">
+  <h2 class="text-4xl font-bold text-center mb-4">How it works</h2>
+  <p class="text-gray-400 text-center max-w-2xl mx-auto mb-16">A 24-agent swarm runs every signal through 3 rounds of debate. Each agent has a specialty &mdash; VWAP, dealer gamma, options flow, FOMC, sentiment, internals. The debate produces a trade card. The risk gate decides if it dispatches.</p>
+
+  <div class="grid md:grid-cols-3 gap-6">
+    <div class="card rounded-xl p-6 transition">
+      <div class="text-3xl mb-3">[brain]</div>
+      <h3 class="font-bold text-lg mb-2">24 Specialist Agents</h3>
+      <p class="text-gray-400 text-sm">Technical (VWAP, gamma, momentum) &middot; Macro (FOMC, VIX, GEX) &middot; Sentiment (flow, fear, contrarian) &middot; Strategists (calendar, spread, sizing). Each is a distinct LLM persona that votes on every cycle.</p>
+    </div>
+    <div class="card rounded-xl p-6 transition">
+      <div class="text-3xl mb-3">[chart]</div>
+      <h3 class="font-bold text-lg mb-2">Live Dealer Gamma</h3>
+      <p class="text-gray-400 text-sm">Built-in GEX engine computes per-strike dealer gamma, gamma flip, call wall, put wall &mdash; from free CBOE OI + Schwab Greeks. Replaces a $199/mo SpotGamma subscription.</p>
+    </div>
+    <div class="card rounded-xl p-6 transition">
+      <div class="text-3xl mb-3">[shield]</div>
+      <h3 class="font-bold text-lg mb-2">Pre-Trade Risk Gate</h3>
+      <p class="text-gray-400 text-sm">Every trade passes 8 checks: kill switch, daily/weekly/monthly loss bands, consecutive losses, position cap, data freshness, idempotency. ~50ms budget. Fail-loud, never silent.</p>
+    </div>
+    <div class="card rounded-xl p-6 transition">
+      <div class="text-3xl mb-3">[target]</div>
+      <h3 class="font-bold text-lg mb-2">Kelly Position Sizer</h3>
+      <p class="text-gray-400 text-sm">Fractional Kelly with daily lock. Position size written to disk at session open, immutable mid-session. No discretionary overrides. Discipline that lives in code, not willpower.</p>
+    </div>
+    <div class="card rounded-xl p-6 transition">
+      <div class="text-3xl mb-3">[paper]</div>
+      <h3 class="font-bold text-lg mb-2">Paper Broker</h3>
+      <p class="text-gray-400 text-sm">Every signal opens a shadow position. Tracks target / stop / EOD exits via real option chain lookup. 30 days of paper data answers "does this make money?" without risking a dollar.</p>
+    </div>
+    <div class="card rounded-xl p-6 transition">
+      <div class="text-3xl mb-3">[radar]</div>
+      <h3 class="font-bold text-lg mb-2">Real-time Dashboard</h3>
+      <p class="text-gray-400 text-sm">Vanilla canvas neural-network viz. Watch the 24 agents debate live. ELO leaderboard ranks them by historical accuracy per regime. Telegram alerts on high-confidence signals.</p>
+    </div>
+  </div>
+</section>
+
+<section id="proof" class="container mx-auto px-6 py-24">
+  <h2 class="text-4xl font-bold text-center mb-4">Honest backtest, real data</h2>
+  <p class="text-gray-400 text-center max-w-2xl mx-auto mb-12">90 days of SPY 1m bars (Polygon-derived). Multiple strategies tested through the same execution pipeline. We publish wins AND losses.</p>
+
+  <div class="card rounded-xl p-8 max-w-3xl mx-auto">
+    <table class="w-full text-sm">
+      <thead class="text-gray-500 text-left">
+        <tr><th class="pb-3">Strategy</th><th class="pb-3 text-right">Trades</th><th class="pb-3 text-right">Win%</th><th class="pb-3 text-right">Sharpe</th><th class="pb-3 text-right">P&amp;L (90d)</th></tr>
+      </thead>
+      <tbody class="divide-y divide-white/10">
+        <tr class="text-green-400">
+          <td class="py-3 font-medium">Friday Late-Day Pin <span class="text-xs text-green-300/70">(documented edge)</span></td>
+          <td class="text-right">14</td><td class="text-right">100.0%</td><td class="text-right font-bold">+3.66</td><td class="text-right font-bold">+$219</td>
+        </tr>
+        <tr class="text-gray-300">
+          <td class="py-3">Overnight Gap Reversion</td>
+          <td class="text-right">12</td><td class="text-right">66.7%</td><td class="text-right">+0.09</td><td class="text-right">+$17</td>
+        </tr>
+        <tr class="text-gray-500">
+          <td class="py-3">Last-Hour Momentum</td>
+          <td class="text-right">14</td><td class="text-right">42.9%</td><td class="text-right">&minus;0.10</td><td class="text-right">&minus;$27</td>
+        </tr>
+        <tr class="text-gray-500">
+          <td class="py-3">Naive SMA(5,20) <span class="text-xs">(baseline)</span></td>
+          <td class="text-right">271</td><td class="text-right">32.5%</td><td class="text-right">&minus;0.29</td><td class="text-right">&minus;$2,362</td>
+        </tr>
+      </tbody>
+    </table>
+    <div class="mt-6 pt-6 border-t border-white/10 text-xs text-gray-500 leading-relaxed">
+      <strong class="text-yellow-400">Honest caveats:</strong> 14-trade Friday Pin sample is small (need &ge;50 for confidence). 100% win rate is partly a function of the strategy's filter excluding hard days &mdash; not a future guarantee. Premium model is approximate; real iron condor at 0.6% wings collects 25-50bps. Strategy must EXCLUDE FOMC/CPI/NFP Fridays (calendar feature shipping next). SPY&times;10 is a proxy for SPX. <strong class="text-yellow-400">No backtest is a forecast.</strong>
+    </div>
+  </div>
+</section>
+
+<section id="pricing" class="container mx-auto px-6 py-24">
+  <h2 class="text-4xl font-bold text-center mb-4">Pricing</h2>
+  <p class="text-gray-400 text-center max-w-2xl mx-auto mb-16">Tool, not autopilot. We charge for the second opinion, not the alpha.</p>
+
+  <div class="grid md:grid-cols-3 gap-6 max-w-5xl mx-auto">
+    <div class="card rounded-xl p-8">
+      <h3 class="text-xl font-bold mb-2">Free</h3>
+      <div class="text-4xl font-bold mb-1">$0</div>
+      <div class="text-sm text-gray-500 mb-6">forever</div>
+      <ul class="space-y-3 text-sm text-gray-300 mb-8">
+        <li>&check; Read-only public dashboard</li>
+        <li>&check; Daily 8:00 AM ET briefing (Telegram)</li>
+        <li>&check; Open-source code on GitHub</li>
+        <li>&check; Honest backtest documentation</li>
+      </ul>
+      <a href="https://github.com/dhawalc/swarmSPX" class="block text-center w-full bg-white/5 border border-white/10 py-3 rounded-lg font-medium hover:bg-white/10">View on GitHub</a>
+    </div>
+
+    <div class="card rounded-xl p-8 border-purple-500/40 relative">
+      <div class="absolute -top-3 left-1/2 -translate-x-1/2 bg-gradient-to-r from-purple-500 to-pink-500 text-white text-xs px-3 py-1 rounded-full font-medium">RECOMMENDED</div>
+      <h3 class="text-xl font-bold mb-2">Pro</h3>
+      <div class="text-4xl font-bold mb-1">$99<span class="text-lg text-gray-500">/mo</span></div>
+      <div class="text-sm text-gray-500 mb-6">monthly, cancel anytime</div>
+      <ul class="space-y-3 text-sm text-gray-300 mb-8">
+        <li>&check; Your own private 24-agent swarm</li>
+        <li>&check; Real-time signal alerts (Telegram + email)</li>
+        <li>&check; Paper broker &mdash; track all signals as if traded</li>
+        <li>&check; GEX dashboard + dealer-positioning context</li>
+        <li>&check; Daily decision audit log (downloadable)</li>
+        <li>&check; Friday Pin auto-fire alert</li>
+        <li>&check; Custom agent slots (up to 6)</li>
+      </ul>
+      <a href="#waitlist" class="block text-center w-full bg-gradient-to-r from-purple-500 to-pink-500 py-3 rounded-lg font-medium hover:opacity-90">Join waitlist</a>
+    </div>
+
+    <div class="card rounded-xl p-8">
+      <h3 class="text-xl font-bold mb-2">Pro+</h3>
+      <div class="text-4xl font-bold mb-1">$299<span class="text-lg text-gray-500">/mo</span></div>
+      <div class="text-sm text-gray-500 mb-6">for serious traders</div>
+      <ul class="space-y-3 text-sm text-gray-300 mb-8">
+        <li>&check; Everything in Pro</li>
+        <li>&check; REST API access (signals + raw data)</li>
+        <li>&check; Custom strategy module slot</li>
+        <li>&check; Walk-forward backtest reports (weekly)</li>
+        <li>&check; Priority support + onboarding call</li>
+        <li>&check; Early access to new strategies</li>
+      </ul>
+      <a href="#waitlist" class="block text-center w-full bg-white/5 border border-white/10 py-3 rounded-lg font-medium hover:bg-white/10">Join waitlist</a>
+    </div>
+  </div>
+</section>
+
+<section id="waitlist" class="container mx-auto px-6 py-24">
+  <div class="max-w-2xl mx-auto text-center">
+    <h2 class="text-4xl font-bold mb-4">Join the waitlist</h2>
+    <p class="text-gray-400 mb-10">First 100 users get 50% off Pro for 6 months. No spam, no hype, no "guaranteed gains" emails. Just a launch notification when SwarmSPX is ready for production traffic.</p>
+
+    <form action="https://formspree.io/f/YOUR_FORMSPREE_ID" method="POST" class="flex flex-col sm:flex-row gap-3 max-w-md mx-auto">
+      <input type="email" name="email" required placeholder="you@email.com"
+             class="flex-1 bg-white/5 border border-white/10 rounded-lg px-4 py-3 placeholder-gray-500 focus:outline-none focus:border-purple-500" />
+      <button type="submit" class="bg-gradient-to-r from-purple-500 to-pink-500 px-6 py-3 rounded-lg font-medium hover:opacity-90">
+        Notify me
+      </button>
+    </form>
+    <p class="text-xs text-gray-600 mt-4">By signing up you agree this is research software. SwarmSPX is NOT licensed financial advice. You are responsible for your own trades.</p>
+  </div>
+</section>
+
+<footer class="container mx-auto px-6 py-12 border-t border-white/10 text-sm text-gray-500">
+  <div class="flex flex-col md:flex-row justify-between gap-6">
+    <div>
+      <div class="font-bold grad-text mb-2">SwarmSPX</div>
+      <div>Multi-agent intelligence for SPX 0DTE traders.</div>
+      <div class="mt-2">Built by <a href="https://x.com/dhawalc" class="text-purple-400 hover:text-purple-300">@dhawalc</a>. Building in public.</div>
+    </div>
+    <div class="grid grid-cols-2 gap-x-12 gap-y-2">
+      <a href="#how" class="hover:text-white">How it works</a>
+      <a href="https://github.com/dhawalc/swarmSPX" class="hover:text-white">GitHub</a>
+      <a href="#proof" class="hover:text-white">Backtest</a>
+      <a href="#pricing" class="hover:text-white">Pricing</a>
+      <a href="/disclaimer.html" class="hover:text-white">Disclaimer</a>
+      <a href="/privacy.html" class="hover:text-white">Privacy</a>
+    </div>
+  </div>
+  <div class="mt-10 pt-6 border-t border-white/5 text-xs text-gray-600 leading-relaxed">
+    <strong class="text-yellow-500/80">DISCLAIMER:</strong> SwarmSPX is research and educational software. It is NOT a registered investment advisor, broker-dealer, or financial planner. All signals are informational only. Past performance does not guarantee future results. Options trading involves substantial risk of loss. Consult a licensed advisor before making any trades. The author bears no responsibility for any losses incurred from use of this software.
+  </div>
+</footer>
+
+</body>
+</html>
