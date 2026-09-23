@@ -37,11 +37,19 @@ class SchwabClient:
         if not self.is_configured:
             return None
         try:
-            from schwab.auth import client_from_token_file
-            self._client = client_from_token_file(
-                token_path=self._token_path,
-                api_key=self._app_key,
-                app_secret=self._secret,
+            from schwab.auth import client_from_access_functions
+
+            # Shared D2DT Schwab token is READ-ONLY (operator rule 2026-09-22): read the
+            # file, keep access-token refreshes in memory, never write it back. Only
+            # ~/D2DT/backend/schwab_auth.py writes it.
+            def _read_token(path=str(self._token_path)):
+                import json
+
+                with open(path, "rb") as f:
+                    return json.load(f)
+
+            self._client = client_from_access_functions(
+                self._app_key, self._secret, _read_token, lambda *a, **k: None
             )
             return self._client
         except Exception as e:
